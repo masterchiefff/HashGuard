@@ -91,7 +91,6 @@ export default function LoginPage() {
     const loadingToast = toast.loading("Verifying OTP...");
 
     try {
-      // Recalculate formattedPhone here since it's not in scope from handleSendOTP
       const formattedPhone = `+254${phoneNumber.replace(/^0/, "")}`;
       const response = await axios.post(`${API_BASE_URL}/verify`, {
         phone: formattedPhone,
@@ -101,7 +100,6 @@ export default function LoginPage() {
         timeout: 10000,
       });
 
-      // After verifying OTP, check if the user is fully registered
       const userStatusResponse = await axios.post(`${API_BASE_URL}/user-status`, {
         phone: formattedPhone,
       }, {
@@ -112,7 +110,6 @@ export default function LoginPage() {
       const userData = userStatusResponse.data;
 
       if (userData.active !== undefined) {
-        // User is registered, store details in localStorage and redirect to overview
         localStorage.setItem("isRegistered", "true");
         localStorage.setItem("userPhone", formattedPhone);
         localStorage.setItem("userWallet", userData.wallet || "");
@@ -128,7 +125,6 @@ export default function LoginPage() {
 
         router.push("/");
       } else {
-        // User is not fully registered, redirect to registration
         localStorage.setItem("phoneVerified", "true");
         localStorage.setItem("userPhone", formattedPhone);
         toast.info("Complete Registration", {
@@ -141,7 +137,6 @@ export default function LoginPage() {
       let description = "Please try again later";
       if (error.response) {
         if (error.response.status === 400 && error.response.data.error === "Rider not registered") {
-          // Recalculate formattedPhone here as well
           const formattedPhone = `+254${phoneNumber.replace(/^0/, "")}`;
           localStorage.setItem("phoneVerified", "true");
           localStorage.setItem("userPhone", formattedPhone);
@@ -285,7 +280,7 @@ export default function LoginPage() {
                         onChange={(e) => handleOtpChange(i, e.target.value)}
                         onPaste={(e) => handleOtpPaste(e, i)}
                         onKeyDown={(e) => handleOtpKeyDown(e, i)}
-                        ref={(el) => (otpRefs.current[i] = el)}
+                        ref={(el) => { otpRefs.current[i] = el; }} // Changed to void callback
                         className="text-center text-lg bg-gray-700 border-none text-white placeholder-gray-500 focus:ring-blue-500 h-12 w-12"
                       />
                     ))}
