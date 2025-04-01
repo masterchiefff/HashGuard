@@ -24,65 +24,65 @@ export default function LoginPage() {
   const handleSendOTP = async () => {
     const phoneRegex = /^\d{9,10}$/;
     if (!phoneNumber || !phoneRegex.test(phoneNumber)) {
-        toast.error("Invalid Phone Number", {
-            description: "Please enter a valid Kenyan mobile number (e.g., 0712345678)",
-        });
-        return;
+      toast.error("Invalid Phone Number", {
+        description: "Please enter a valid Kenyan mobile number (e.g., 0712345678)",
+      });
+      return;
     }
 
     setIsLoading(true);
     const loadingToast = toast.loading("Sending OTP...");
 
     try {
-        const formattedPhone = `+254${phoneNumber.replace(/^0/, "")}`;
-        const response = await axios.post(`${API_BASE_URL}/login-otp`, {
-            phone: formattedPhone,
-        }, {
-            headers: { "Content-Type": "application/json" },
-            timeout: 10000,
-        });
+      const formattedPhone = `+254${phoneNumber.replace(/^0/, "")}`;
+      const response = await axios.post(`${API_BASE_URL}/login-otp`, {
+        phone: formattedPhone,
+      }, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 10000,
+      });
 
-        toast.success("OTP Sent", {
-            description: response.data.message || "A verification code has been sent to your WhatsApp",
-            id: loadingToast,
-        });
+      toast.success("OTP Sent", {
+        description: response.data.message || "Check server console for your verification code",
+        id: loadingToast,
+      });
 
-        setStep(2);
+      setStep(2);
     } catch (error: any) {
-        let description = "Please try again later";
-        if (error.response && error.response.status === 400 && error.response.data.error === "Phone not registered. Please register first.") {
-            toast.info("New User Detected", {
-                description: "You need to register first. Let’s get started!",
-                id: loadingToast,
-            });
-            router.push("/signup");
-            return;
-        }
-        if (error.code === "ERR_NAME_NOT_RESOLVED") {
-            description = "Unable to connect to the server. Please check your internet connection or contact support.";
-        } else if (error.response) {
-            description = error.response.status === 400
-                ? error.response.data.error
-                : error.response.data?.error || error.message;
-        } else if (error.request) {
-            description = "No response from the server. Please check your network connection.";
-        } else {
-            description = error.message;
-        }
-        toast.error("Failed to Send OTP", {
-            description,
-            id: loadingToast,
+      let description = "Please try again later";
+      if (error.response && error.response.status === 400 && error.response.data.error === "Phone not registered. Please register first.") {
+        toast.info("New User Detected", {
+          description: "You need to register first. Let’s get started!",
+          id: loadingToast,
         });
+        router.push("/signup");
+        return;
+      }
+      if (error.code === "ERR_NAME_NOT_RESOLVED") {
+        description = "Unable to connect to the server. Please check your internet connection or contact support.";
+      } else if (error.response) {
+        description = error.response.status === 400
+          ? error.response.data.error
+          : error.response.data?.error || error.message;
+      } else if (error.request) {
+        description = "No response from the server. Please check your network connection.";
+      } else {
+        description = error.message;
+      }
+      toast.error("Failed to Send OTP", {
+        description,
+        id: loadingToast,
+      });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
-};
+  };
 
   const handleVerifyOTP = async () => {
     const otpString = otp.join("");
     if (!otpString || otpString.length !== 6 || !/^\d{6}$/.test(otpString)) {
       toast.error("Invalid OTP", {
-        description: "Please enter the 6-digit code sent to your phone",
+        description: "Please enter the 6-digit code from the server console",
       });
       return;
     }
@@ -91,6 +91,7 @@ export default function LoginPage() {
     const loadingToast = toast.loading("Verifying OTP...");
 
     try {
+      // Recalculate formattedPhone here since it's not in scope from handleSendOTP
       const formattedPhone = `+254${phoneNumber.replace(/^0/, "")}`;
       const response = await axios.post(`${API_BASE_URL}/verify`, {
         phone: formattedPhone,
@@ -121,7 +122,7 @@ export default function LoginPage() {
         localStorage.setItem("riderId", userData.riderId || "");
 
         toast.success("Login Successful", {
-          description: "Welcome back to Boda Shield!",
+          description: "Welcome back to HashGuard!",
           id: loadingToast,
         });
 
@@ -140,7 +141,8 @@ export default function LoginPage() {
       let description = "Please try again later";
       if (error.response) {
         if (error.response.status === 400 && error.response.data.error === "Rider not registered") {
-          // Redirect to registration if the user is not fully registered
+          // Recalculate formattedPhone here as well
+          const formattedPhone = `+254${phoneNumber.replace(/^0/, "")}`;
           localStorage.setItem("phoneVerified", "true");
           localStorage.setItem("userPhone", formattedPhone);
           toast.info("New User Detected", {
@@ -251,7 +253,7 @@ export default function LoginPage() {
                       maxLength={10}
                     />
                   </div>
-                  <p className="text-xs text-gray-400">We'll send a verification code to this number</p>
+                  <p className="text-xs text-gray-400">We'll log a verification code to the server console</p>
                 </div>
                 <Button
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
@@ -288,9 +290,9 @@ export default function LoginPage() {
                       />
                     ))}
                   </div>
-                  <p className="text-xs text-gray-400">Enter the 6-digit code sent to +254{phoneNumber}</p>
+                  <p className="text-xs text-gray-400">Enter the 6-digit code from the server console for +254{phoneNumber}</p>
                   <p className="text-xs text-gray-400 mt-4">
-                    Didn't receive the code?{" "}
+                    Didn't see the code?{" "}
                     <button className="text-blue-500 underline" onClick={handleSendOTP}>Resend</button>
                   </p>
                 </div>
