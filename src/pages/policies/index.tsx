@@ -283,7 +283,7 @@ export default function PoliciesPage() {
           clearInterval(interval);
           toast.info('Payment still pending. Check your phone', { id: toastId });
         }
-      } catch (error) {
+      } catch (error: any) { // Explicitly type as 'any'
         clearInterval(interval);
         toast.error('Payment verification failed', { id: toastId });
       }
