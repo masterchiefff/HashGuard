@@ -40,7 +40,7 @@ export default function PoliciesPage() {
   const [selectedPlans, setSelectedPlans] = useState<{
     rider: "Daily" | "Weekly" | "Monthly";
     bike: "Daily" | "Weekly" | "Monthly";
-  }>({ rider: "Weekly", bike: "Weekly" }); // Default both to "Weekly"
+  }>({ rider: "Weekly", bike: "Weekly" });
   const [selectedProtectionTypes, setSelectedProtectionTypes] = useState<Set<"rider" | "bike">>(new Set(["rider"]));
   const [paymentStep, setPaymentStep] = useState<"select" | "pay" | "confirm">("select");
   const [paymentMethod, setPaymentMethod] = useState<"mpesa" | "hbar">("mpesa");
@@ -217,7 +217,6 @@ export default function PoliciesPage() {
       const totalAmount = calculateTotalAmount();
       
       if (paymentMethod === 'mpesa') {
-        // M-Pesa payment flow remains the same
         const response = await axios.post(`${API_BASE_URL}/paypremium`, {
           phone: user.phone,
           policies: policiesToPurchase,
@@ -231,15 +230,12 @@ export default function PoliciesPage() {
   
         await pollPaymentStatus(response.data.checkoutRequestId);
       } else {
-        // HBAR wallet payment flow
         setPaymentStep('confirm');
         
-        // First verify the user has sufficient balance
         if (user.walletBalance < totalAmount) {
           throw new Error('Insufficient HBAR balance');
         }
   
-        // Make the payment request in HBAR
         const response = await axios.post(`${API_BASE_URL}/paypremium`, {
           phone: user.phone,
           policies: policiesToPurchase,
@@ -250,21 +246,19 @@ export default function PoliciesPage() {
         if (response.data.success) {
           toast.success('Payment successful!', { id: toastId });
           
-          // Update local wallet balance
           const newBalance = user.walletBalance - totalAmount;
           setUser(prev => ({ 
             ...prev!, 
             walletBalance: newBalance 
           }));
           
-          // Refresh policies and reset UI
           fetchPolicies(user.phone);
           setPaymentStep('select');
         } else {
           throw new Error(response.data.error || 'HBAR payment failed');
         }
       }
-    } catch (error) {
+    } catch (error) { // Line 268: 'error' is of type 'unknown'
       toast.error(error.message || 'Payment failed', { id: toastId });
       setPaymentStep('pay');
     } finally {
@@ -427,7 +421,7 @@ export default function PoliciesPage() {
                 {selectedProtectionTypes.size === 0 
                   ? "None" 
                   : Array.from(selectedProtectionTypes)
-                      .filter(type => selectedPlans[type]) // Ensure the plan exists
+                      .filter(type => selectedPlans[type])
                       .map(type => 
                         `${type === "rider" ? "Rider" : "Bike"} • ${selectedPlans[type]} • ${(planOptions[type][selectedPlans[type]].amount * 12.9).toFixed(0)} KSh`
                       )
