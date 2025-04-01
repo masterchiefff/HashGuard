@@ -1,12 +1,12 @@
 "use client";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation"; // Import usePathname
 import { Shield, User, Wallet, FileText, File, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export default function Sidebar({ routeName }: { routeName: string }) {
     const router = useRouter();
-    const { pathname } = router; 
+    const pathname = usePathname(); // Define pathname using usePathname hook
 
     const handleLogout = () => {
         toast.success("Logged out successfully");
@@ -31,13 +31,13 @@ export default function Sidebar({ routeName }: { routeName: string }) {
                 <Button
                     onClick={() => router.push("/")}
                     className={`w-full flex items-center p-2 rounded !justify-start ${
-                        isActive("/") ? "bg-blue-600 text-blue-800" : "text-gray-300 hover:bg-gray-600"
+                        isActive("/") ? "bg-blue-600 text-white" : "text-gray-300 hover:bg-gray-600"
                     }`}
                     variant="ghost"
                 >
                     <User
                         className={`h-5 w-5 mr-2 ${
-                            isActive("/") ? "text-blue-800" : "text-gray-400"
+                            isActive("/") ? "text-white" : "text-gray-400"
                         }`}
                     />
                     <span>Overview</span>
@@ -47,13 +47,13 @@ export default function Sidebar({ routeName }: { routeName: string }) {
                 <Button
                     onClick={() => router.push("/policies")}
                     className={`w-full flex items-center p-2 rounded !justify-start ${
-                        isActive("/policies") ? "bg-blue-600 text-blue-800" : "text-gray-300 hover:bg-gray-600"
+                        isActive("/policies") ? "bg-blue-600 text-white" : "text-gray-300 hover:bg-gray-600"
                     }`}
                     variant="ghost"
                 >
                     <FileText
                         className={`h-5 w-5 mr-2 ${
-                            isActive("/policies") ? "text-blue-800" : "text-gray-400"
+                            isActive("/policies") ? "text-white" : "text-gray-400"
                         }`}
                     />
                     <span>Policies</span>
@@ -63,13 +63,13 @@ export default function Sidebar({ routeName }: { routeName: string }) {
                 <Button
                     onClick={() => router.push("/claims")}
                     className={`w-full flex items-center p-2 rounded !justify-start ${
-                        isActive("/claims") ? "bg-blue-600 text-blue-800" : "text-gray-300 hover:bg-gray-600"
+                        isActive("/claims") ? "bg-blue-600 text-white" : "text-gray-300 hover:bg-gray-600"
                     }`}
                     variant="ghost"
                 >
                     <File
                         className={`h-5 w-5 mr-2 ${
-                            isActive("/claims") ? "text-blue-800" : "text-gray-400"
+                            isActive("/claims") ? "text-white" : "text-gray-400"
                         }`}
                     />
                     <span>Claims</span>
@@ -79,13 +79,13 @@ export default function Sidebar({ routeName }: { routeName: string }) {
                 <Button
                     onClick={() => router.push("/wallet")}
                     className={`w-full flex items-center p-2 rounded !justify-start ${
-                        isActive("/wallet") ? "bg-blue-600 text-blue-800" : "text-gray-300 hover:bg-gray-600"
+                        isActive("/wallet") ? "bg-blue-600 text-white" : "text-gray-300 hover:bg-gray-600"
                     }`}
                     variant="ghost"
                 >
                     <Wallet
                         className={`h-5 w-5 mr-2 ${
-                            isActive("/wallet") ? "text-blue-800" : "text-gray-400"
+                            isActive("/wallet") ? "text-white" : "text-gray-400"
                         }`}
                     />
                     <span>Wallet</span>
