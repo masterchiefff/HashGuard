@@ -1,4 +1,3 @@
-// src/app/claims/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -41,7 +40,7 @@ interface Claim {
   policy: string;  // This is the policy ObjectId
   premium: number;
   effectiveDate: string;
-  status: "Pending" | "Approved" | "Rejected";
+  status: "Pending" | "Approved" | "Rejected" | "Processed";
   createdAt: string;
   details?: string;
   imageUrl?: string;
@@ -65,83 +64,64 @@ export default function ClaimsPage() {
     ? 'https://hashscan.io/mainnet/transaction/' 
     : 'https://hashscan.io/testnet/transaction/';
 
-  const fetchPolicies = useCallback(async (phone: string): Promise<Policy[]> => {
-    try {
-      const response = await axios.post<{ policies: Policy[] }>(
-        `${API_BASE_URL}/policies`,
-        { phone, page: 1, limit: 10 },
-        { headers: { "Content-Type": "application/json" }, timeout: 10000 }
-      );
-
-      const fetchedPolicies = response.data.policies || [];
-      setPolicies(fetchedPolicies);
-
-      const activePoliciesList = fetchedPolicies.filter(
-        (p) => p.active && new Date(p.expiryDate) > new Date()
-      );
-      setActivePolicies(activePoliciesList);
-      setSelectedPolicyId(activePoliciesList.length > 0 ? activePoliciesList[0]._id : null);
-      return activePoliciesList;
-    } catch (error) {
-      console.error("Failed to fetch policies:", error);
-      setPolicies([]);
-      setActivePolicies([]);
-      setSelectedPolicyId(null);
-      return [];
-    }
-  }, [API_BASE_URL]);
-
-  const fetchClaims = useCallback(async (phone: string, retries = 3) => {
-    setIsLoading(true);
-    const loadingToast = toast.loading("Fetching claims...");
-
-    try {
-      const response = await axios.post<{ claims: Claim[], success: boolean, total: number }>(
-        `${API_BASE_URL}/get-claims`,
-        { phone },
-        { 
-          headers: { "Content-Type": "application/json" },
-          timeout: 10000 
+    const fetchPoliciesAndClaims = useCallback(async (phone: string): Promise<Policy[]> => {
+        setIsLoading(true);
+        const loadingToast = toast.loading("Fetching policies and claims...");
+      
+        try {
+          const [policiesResponse, claimsResponse] = await Promise.all([
+            axios.post<{ policies: Policy[] }>(
+              `${API_BASE_URL}/policies`,
+              { phone, page: 1, limit: 10 },
+              { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+            ),
+            axios.post<{ claims: Claim[], success: boolean, total: number }>(
+              `${API_BASE_URL}/get-claims`,
+              { phone },
+              { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+            )
+          ]);
+      
+          const fetchedPolicies = policiesResponse.data.policies || [];
+          const fetchedClaims = claimsResponse.data.claims || [];
+          setPolicies(fetchedPolicies);
+          setClaims(fetchedClaims);
+      
+          // Get the policy IDs that have claims
+          const claimedPolicyIds = new Set(fetchedClaims.map((claim) => claim.policy));
+      
+          // Filter active policies, excluding those with claims
+          const activePoliciesList = fetchedPolicies.filter(
+            (p) =>
+              p.active &&
+              new Date(p.expiryDate) > new Date() &&
+              !claimedPolicyIds.has(p._id)
+          );
+      
+          setActivePolicies(activePoliciesList);
+          setSelectedPolicyId(activePoliciesList.length > 0 ? activePoliciesList[0]._id : null);
+      
+          toast.success("Data loaded", {
+            description: `${activePoliciesList.length} active policies, ${fetchedClaims.length} claims`,
+            id: loadingToast,
+          });
+      
+          return activePoliciesList;
+        } catch (error) {
+          console.error("Failed to fetch policies or claims:", error);
+          setPolicies([]);
+          setActivePolicies([]);
+          setClaims([]);
+          setSelectedPolicyId(null);
+          toast.error("Error loading data", {
+            description: "Failed to fetch policies or claims",
+            id: loadingToast,
+          });
+          return [];
+        } finally {
+          setIsLoading(false);
         }
-      );
-
-      if (!response.data.success) {
-        throw new Error("Failed to fetch claims from server");
-      }
-
-      const fetchedClaims = response.data.claims || [];
-      setClaims(fetchedClaims);
-
-      if (fetchedClaims.length === 0) {
-        toast.info("No claims found", {
-          description: "You haven't submitted any claims yet",
-          id: loadingToast,
-        });
-      } else {
-        toast.success(`${fetchedClaims.length} claims loaded`, {
-          id: loadingToast,
-        });
-      }
-    } catch (error) {
-      const axiosError = error as AxiosError<{ error: string }>;
-      if (retries > 0 && (axiosError.response?.status === 503 || axiosError.code === 'ECONNABORTED')) {
-        setTimeout(() => fetchClaims(phone, retries - 1), 2000);
-        return;
-      }
-
-      const errorMessage = axiosError.response?.data?.error || 
-                          axiosError.message || 
-                          "Failed to fetch claims";
-      toast.error("Error loading claims", { 
-        description: errorMessage, 
-        id: loadingToast 
-      });
-      setError(errorMessage);
-      setClaims([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [API_BASE_URL]);
+      }, [API_BASE_URL]);
 
   useEffect(() => {
     const isRegistered = localStorage.getItem("isRegistered");
@@ -165,9 +145,8 @@ export default function ClaimsPage() {
     }
 
     setUser({ phone: storedPhone, name, email, wallet, idNumber });
-    fetchPolicies(storedPhone);
-    fetchClaims(storedPhone);
-  }, [router, fetchPolicies, fetchClaims]);
+    fetchPoliciesAndClaims(storedPhone);
+  }, [router, fetchPoliciesAndClaims]);
 
   const handleSubmitClaim = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,7 +155,7 @@ export default function ClaimsPage() {
       return;
     }
 
-    const currentActivePolicies = await fetchPolicies(user.phone);
+    const currentActivePolicies = activePolicies;
     if (currentActivePolicies.length === 0) {
       setError("No active policies found. Please purchase a policy first.");
       return;
@@ -221,7 +200,7 @@ export default function ClaimsPage() {
 
       setClaimDetails("");
       setClaimImage(null);
-      fetchClaims(user.phone);
+      fetchPoliciesAndClaims(user.phone); // Refresh policies and claims after submission
     } catch (error) {
       const axiosError = error as AxiosError<{ error: string }>;
       const status = axiosError.response?.status;
@@ -250,7 +229,6 @@ export default function ClaimsPage() {
     router.push("/login");
   };
 
-  // Helper function to get policy details for a claim
   const getPolicyDetails = (policyId: string) => {
     const policy = policies.find(p => p._id === policyId);
     return policy ? {
@@ -326,7 +304,7 @@ export default function ClaimsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            claim.status === "Approved" ? "bg-green-100 text-green-800" :
+                            claim.status === "Approved" || claim.status === "Processed" ? "bg-green-100 text-green-800" :
                             claim.status === "Rejected" ? "bg-red-100 text-red-800" :
                             "bg-yellow-100 text-yellow-800"
                           }`}>
@@ -334,8 +312,8 @@ export default function ClaimsPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {claim.imageUrl ? (
-                            <Link href={`${API_BASE_URL}${claim.imageUrl}`} target="_blank" className="text-blue-400 hover:text-blue-300">
+                          {claim.transactionId ? (
+                            <Link href={`${API_BASE_URL}${claim.transactionId}`} target="_blank" className="text-blue-400 hover:text-blue-300">
                               <ExternalLink className="h-4 w-4 inline mr-1" />
                               View Evidence
                             </Link>
