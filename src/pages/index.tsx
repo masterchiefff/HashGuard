@@ -9,32 +9,53 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import MainLayout from "@/components/@layouts/main-layout";
 
+interface User {
+  phone: string;
+  name: string;
+  email: string;
+  wallet: string;
+  idNumber: string;
+  riderId: string;
+  isFromLocalStorage?: boolean;
+}
+
+interface Policy {
+  _id: string;
+  protectionType: "rider" | "bike";
+  active: boolean;
+  expiryDate: string;
+  createdAt: string;
+  hbarAmount?: number;
+  premiumPaid?: number;
+}
+
+interface Claim {
+  _id: string;
+  createdAt: string;
+  premium?: number;
+  status: string;
+}
+
+interface OverviewData {
+  riderId: string;
+  fullName: string;
+  policyActive: boolean;
+  nextPaymentDue: string;
+  nextBill: number;
+  walletBalance: number;
+  hptBalance: number;
+  recentActivities: { type: string; date: string; amount: number; status?: string }[];
+}
+
 export default function OverviewPage() {
   const router = useRouter();
-  const [user, setUser] = useState<{
-    phone: string;
-    name: string;
-    email: string;
-    wallet: string;
-    idNumber: string;
-    riderId: string;
-    isFromLocalStorage?: boolean;
-  } | null>(null);
-  const [overviewData, setOverviewData] = useState<{
-    riderId: string;
-    fullName: string;
-    policyActive: boolean;
-    nextPaymentDue: string;
-    nextBill: number;
-    walletBalance: number;
-    hptBalance: number;
-    recentActivities: { type: string; date: string; amount: number; status?: string }[];
-  } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5300";
 
-  const defaultOverviewData = {
+  const defaultOverviewData: OverviewData = {
     riderId: "N/A",
     fullName: "User",
     policyActive: false,
@@ -72,62 +93,61 @@ export default function OverviewPage() {
 
     try {
       // Fetch wallet balance
-      const walletResponse = await axios.post(`${API_BASE_URL}/wallet-balance`, { phone }, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 10000,
-      });
+      const walletResponse = await axios.post<{ walletBalance: number }>(
+        `${API_BASE_URL}/wallet-balance`,
+        { phone },
+        { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+      );
 
       // Fetch policies
-      const policiesResponse = await axios.post(`${API_BASE_URL}/policies`, {
-        phone,
-        page: 1,
-        limit: 100, // Fetch all policies
-      }, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 10000,
-      });
+      const policiesResponse = await axios.post<{ policies: Policy[] }>(
+        `${API_BASE_URL}/policies`,
+        { phone, page: 1, limit: 100 },
+        { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+      );
 
       // Fetch claims
-      const claimsResponse = await axios.post(`${API_BASE_URL}/claims`, {
-        phone,
-      }, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 10000,
-      });
+      const claimsResponse = await axios.post<{ claims: Claim[] }>(
+        `${API_BASE_URL}/claims`,
+        { phone },
+        { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+      );
 
       const policies = policiesResponse.data.policies || [];
       const claims = claimsResponse.data.claims || [];
 
       // Determine insurance status
       const activePolicies = policies.filter(
-        (policy: any) => policy.active && new Date(policy.expiryDate) > new Date()
+        (policy) => policy.active && new Date(policy.expiryDate) > new Date()
       );
       const policyActive = activePolicies.length > 0;
       const nextPaymentDue = policyActive
         ? activePolicies
-            .map((policy: any) => new Date(policy.expiryDate))
-            .sort((a, b) => a.getTime() - b.getTime())[0]
+            .map((policy) => new Date(policy.expiryDate))
+            .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0]
             .toLocaleDateString()
         : "N/A";
-      const nextBill = policyActive ? activePolicies.reduce((sum: number, policy: any) => {
-        return sum + (policy.hbarAmount ? policy.hbarAmount * 12.9 : policy.premiumPaid || 0);
-      }, 0) : 0;
+      const nextBill = policyActive
+        ? activePolicies.reduce((sum: number, policy: Policy) => {
+            return sum + (policy.hbarAmount ? policy.hbarAmount * 12.9 : policy.premiumPaid || 0);
+          }, 0)
+        : 0;
 
       // Combine policies and claims into recent activities
       const recentActivities = [
-        ...policies.map((policy: any) => ({
+        ...policies.map((policy) => ({
           type: `Policy Created (${policy.protectionType === "rider" ? "Rider" : "Bike"})`,
           date: new Date(policy.createdAt).toLocaleString(),
           amount: policy.hbarAmount ? policy.hbarAmount * 12.9 : policy.premiumPaid || 0,
           status: policy.active && new Date(policy.expiryDate) > new Date() ? "Active" : "Expired",
         })),
-        ...claims.map((claim: any) => ({
+        ...claims.map((claim) => ({
           type: "Claim Filed",
           date: new Date(claim.createdAt).toLocaleString(),
           amount: claim.premium || 0,
           status: claim.status || "Pending",
         })),
-      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      ].sort((a: { date: string }, b: { date: string }) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       const fullName = localStorage.getItem("userName") || "User";
       const riderId = localStorage.getItem("riderId") || "N/A";
@@ -148,7 +168,7 @@ export default function OverviewPage() {
         nextPaymentDue,
         nextBill,
         walletBalance: walletResponse.data.walletBalance || 0,
-        hptBalance: 0, // Assuming HPT balance isn't available from wallet-balance; adjust if needed
+        hptBalance: 0, // Adjust if HPT balance is available from API
         recentActivities,
       });
 
