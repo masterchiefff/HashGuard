@@ -191,13 +191,12 @@ export default function PoliciesPage() {
     return totalHbar;
   };
 
-  // Handle payment
   const handlePayPremium = async () => {
     if (!user?.phone || selectedProtectionTypes.size === 0) return;
-
+  
     setIsLoading(true);
     const toastId = toast.loading('Initiating payment...');
-
+  
     try {
       const policiesToPurchase = [];
       if (selectedProtectionTypes.has("rider") && selectedPlans.rider) {
@@ -214,40 +213,55 @@ export default function PoliciesPage() {
           amount: planOptions.bike[selectedPlans.bike].amount
         });
       }
-
+  
       const totalAmount = calculateTotalAmount();
-      let response;
-
+      
       if (paymentMethod === 'mpesa') {
-        response = await axios.post(`${API_BASE_URL}/paypremium`, {
+        // M-Pesa payment flow remains the same
+        const response = await axios.post(`${API_BASE_URL}/paypremium`, {
           phone: user.phone,
           policies: policiesToPurchase,
-          totalAmount: totalAmount * 12.9,
+          totalAmount: totalAmount * 12.9, // Convert to KSh
           paymentMethod: 'mpesa'
         });
-
+  
         if (!response.data.checkoutRequestId) {
           throw new Error('Payment initiation failed - no checkout ID received');
         }
-
+  
         await pollPaymentStatus(response.data.checkoutRequestId);
       } else {
+        // HBAR wallet payment flow
         setPaymentStep('confirm');
-        response = await axios.post(`${API_BASE_URL}/paypremium`, {
+        
+        // First verify the user has sufficient balance
+        if (user.walletBalance < totalAmount) {
+          throw new Error('Insufficient HBAR balance');
+        }
+  
+        // Make the payment request in HBAR
+        const response = await axios.post(`${API_BASE_URL}/paypremium`, {
           phone: user.phone,
           policies: policiesToPurchase,
-          totalAmount,
+          totalAmount: totalAmount, // Send HBAR amount
           paymentMethod: 'hbar'
         });
-
+  
         if (response.data.success) {
           toast.success('Payment successful!', { id: toastId });
-          setPaymentStep('select');
+          
+          // Update local wallet balance
+          const newBalance = user.walletBalance - totalAmount;
+          setUser(prev => ({ 
+            ...prev!, 
+            walletBalance: newBalance 
+          }));
+          
+          // Refresh policies and reset UI
           fetchPolicies(user.phone);
-          const balanceResponse = await axios.post(`${API_BASE_URL}/wallet-balance`, { phone: user.phone });
-          setUser(prev => ({ ...prev!, walletBalance: balanceResponse.data.walletBalance }));
+          setPaymentStep('select');
         } else {
-          throw new Error('HBAR payment failed');
+          throw new Error(response.data.error || 'HBAR payment failed');
         }
       }
     } catch (error) {

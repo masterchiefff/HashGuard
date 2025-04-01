@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import axios, { AxiosError } from "axios";
-import { Shield, User, Wallet, FileText, LogOut, File, Activity, Upload } from "lucide-react";
+import { Shield, User, Wallet, FileText, LogOut, File, Activity, Upload, ExternalLink } from "lucide-react";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import MainLayout from "@/components/@layouts/main-layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Link from "next/link";
 
 interface User {
   phone: string;
@@ -31,14 +32,16 @@ interface Policy {
   createdAt: string;
   expiryDate: string;
   active: boolean;
+  transactionId?: string;
 }
 
 interface Claim {
-  policy: string;
+  _id: string;
+  claimId: string;
+  policy: string;  // This is the policy ObjectId
   premium: number;
   effectiveDate: string;
   status: "Pending" | "Approved" | "Rejected";
-  claimId: string;
   createdAt: string;
   details?: string;
   imageUrl?: string;
@@ -58,6 +61,9 @@ export default function ClaimsPage() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5300";
   const PHONE_REGEX = /^\+254\d{9}$/;
+  const EXPLORER_URL = process.env.NODE_ENV === 'production' 
+    ? 'https://hashscan.io/mainnet/transaction/' 
+    : 'https://hashscan.io/testnet/transaction/';
 
   const fetchPolicies = useCallback(async (phone: string): Promise<Policy[]> => {
     try {
@@ -68,15 +74,12 @@ export default function ClaimsPage() {
       );
 
       const fetchedPolicies = response.data.policies || [];
-      console.log("Fetched Policies:", fetchedPolicies);
       setPolicies(fetchedPolicies);
 
       const activePoliciesList = fetchedPolicies.filter(
         (p) => p.active && new Date(p.expiryDate) > new Date()
       );
-      console.log("Active Policies:", activePoliciesList);
       setActivePolicies(activePoliciesList);
-      // Set the first active policy as default if available
       setSelectedPolicyId(activePoliciesList.length > 0 ? activePoliciesList[0]._id : null);
       return activePoliciesList;
     } catch (error) {
@@ -93,37 +96,46 @@ export default function ClaimsPage() {
     const loadingToast = toast.loading("Fetching claims...");
 
     try {
-      const response = await axios.post<{ claims: Claim[] }>(
-        `${API_BASE_URL}/claims`,
+      const response = await axios.post<{ claims: Claim[], success: boolean, total: number }>(
+        `${API_BASE_URL}/get-claims`,
         { phone },
-        { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+        { 
+          headers: { "Content-Type": "application/json" },
+          timeout: 10000 
+        }
       );
 
+      if (!response.data.success) {
+        throw new Error("Failed to fetch claims from server");
+      }
+
       const fetchedClaims = response.data.claims || [];
-      console.log("Fetched Claims:", fetchedClaims);
       setClaims(fetchedClaims);
 
       if (fetchedClaims.length === 0) {
         toast.info("No claims found", {
-          description: "Submit a claim if you have an active policy.",
+          description: "You haven't submitted any claims yet",
           id: loadingToast,
         });
       } else {
-        toast.success("Claims Loaded", {
-          description: "Your claims history is up to date",
+        toast.success(`${fetchedClaims.length} claims loaded`, {
           id: loadingToast,
         });
       }
     } catch (error) {
       const axiosError = error as AxiosError<{ error: string }>;
-      if (retries > 0 && axiosError.response?.status === 503) {
+      if (retries > 0 && (axiosError.response?.status === 503 || axiosError.code === 'ECONNABORTED')) {
         setTimeout(() => fetchClaims(phone, retries - 1), 2000);
         return;
       }
 
-      const errorMessage =
-        axiosError.response?.data?.error || axiosError.message || "Failed to fetch claims";
-      toast.error("Failed to Load Claims", { description: errorMessage, id: loadingToast });
+      const errorMessage = axiosError.response?.data?.error || 
+                          axiosError.message || 
+                          "Failed to fetch claims";
+      toast.error("Error loading claims", { 
+        description: errorMessage, 
+        id: loadingToast 
+      });
       setError(errorMessage);
       setClaims([]);
     } finally {
@@ -164,9 +176,7 @@ export default function ClaimsPage() {
       return;
     }
 
-    // Fetch the latest active policies
     const currentActivePolicies = await fetchPolicies(user.phone);
-    console.log("Active Policies on Submit:", currentActivePolicies);
     if (currentActivePolicies.length === 0) {
       setError("No active policies found. Please purchase a policy first.");
       return;
@@ -191,7 +201,7 @@ export default function ClaimsPage() {
     try {
       const formData = new FormData();
       formData.append("phone", user.phone);
-      formData.append("policyId", selectedPolicyId); // Send the selected policy ID
+      formData.append("policyId", selectedPolicyId);
       formData.append("details", claimDetails);
       formData.append("image", claimImage);
 
@@ -240,6 +250,16 @@ export default function ClaimsPage() {
     router.push("/login");
   };
 
+  // Helper function to get policy details for a claim
+  const getPolicyDetails = (policyId: string) => {
+    const policy = policies.find(p => p._id === policyId);
+    return policy ? {
+      plan: policy.plan,
+      protectionType: policy.protectionType,
+      active: policy.active && new Date(policy.expiryDate) > new Date()
+    } : { plan: "Unknown", protectionType: "Unknown", active: false };
+  };
+
   if (!user) return null;
 
   return (
@@ -258,55 +278,75 @@ export default function ClaimsPage() {
           {isLoading && claims.length === 0 ? (
             <p className="text-gray-400">Loading claims...</p>
           ) : claims.length > 0 ? (
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-gray-400 border-b border-gray-600">
-                  <th className="py-2">Policy</th>
-                  <th className="py-2">Premium (HBAR)</th>
-                  <th className="py-2">Effective Date</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {claims.map((claim, index) => (
-                  <tr
-                    key={claim.claimId || index}
-                    className={`hover:bg-gray-700 ${index % 2 === 1 ? "bg-[#3b4a6b]" : ""}`}
-                  >
-                    <td className="py-3 text-white">{claim.policy || "Unknown"}</td>
-                    <td className="py-3 text-white">{claim.premium ? claim.premium.toFixed(2) : "N/A"}</td>
-                    <td className="py-3 text-white">
-                      {claim.effectiveDate ? new Date(claim.effectiveDate).toLocaleDateString() : "N/A"}
-                    </td>
-                    <td
-                      className={`py-3 font-bold ${
-                        claim.status === "Pending"
-                          ? "text-[#f5a623]"
-                          : claim.status === "Approved"
-                          ? "text-[#00c4b4]"
-                          : "text-[#ff4d4f]"
-                      }`}
-                    >
-                      • {claim.status || "Unknown"}
-                    </td>
-                    <td className="py-3">
-                      <Button
-                        className="bg-transparent border border-[#00c4b4] text-[#00c4b4] hover:bg-[#00c4b4] hover:text-white text-xs"
-                        onClick={() =>
-                          toast.info("Claim Details", {
-                            description: `Claim ID: ${claim.claimId || "N/A"}\nPolicy: ${claim.policy || "Unknown"}\nDetails: ${claim.details || "None"}\nImage: ${claim.imageUrl ? "Uploaded" : "None"}\nSubmitted: ${claim.createdAt ? new Date(claim.createdAt).toLocaleString() : "N/A"}`,
-                          })
-                        }
-                        disabled={isLoading}
-                      >
-                        Claim Details
-                      </Button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-600">
+                <thead className="bg-gray-700">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Claim ID
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Policy
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Amount (HBAR)
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                      Actions
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-[#2D3748] divide-y divide-gray-600">
+                  {claims.map((claim) => {
+                    const policyDetails = getPolicyDetails(claim.policy);
+                    return (
+                      <tr key={claim._id} className="hover:bg-gray-700">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                          {claim.claimId || "N/A"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                          {policyDetails.plan} - {policyDetails.protectionType}
+                          {policyDetails.active && (
+                            <span className="ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                              Active
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                          {claim.premium ? claim.premium.toFixed(2) : "N/A"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                          {claim.createdAt ? new Date(claim.createdAt).toLocaleDateString() : "N/A"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            claim.status === "Approved" ? "bg-green-100 text-green-800" :
+                            claim.status === "Rejected" ? "bg-red-100 text-red-800" :
+                            "bg-yellow-100 text-yellow-800"
+                          }`}>
+                            {claim.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                          {claim.imageUrl ? (
+                            <Link href={`${API_BASE_URL}${claim.imageUrl}`} target="_blank" className="text-blue-400 hover:text-blue-300">
+                              <ExternalLink className="h-4 w-4 inline mr-1" />
+                              View Evidence
+                            </Link>
+                          ) : "No evidence"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="text-center py-8">
               <p className="text-gray-400">No claims found.</p>
@@ -389,7 +429,7 @@ export default function ClaimsPage() {
                 {claimImage && <p className="text-gray-400 text-xs ml-2">{claimImage.name}</p>}
               </div>
             </div>
-            {error && <p className="text-[#ff4d4f] text-sm mb-2">{error}</p>}
+            {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
             <Button
               type="submit"
               className="bg-blue-600 hover:bg-blue-700 text-white"
