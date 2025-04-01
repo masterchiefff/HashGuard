@@ -44,6 +44,8 @@ interface Claim {
   createdAt: string;
   details?: string;
   imageUrl?: string;
+  transactionId?: string;  // Added transactionId (for payout transaction)
+  paymentTransactionId?: string;  // Optional: added for payment transaction if needed
 }
 
 export default function ClaimsPage() {
@@ -64,64 +66,64 @@ export default function ClaimsPage() {
     ? 'https://hashscan.io/mainnet/transaction/' 
     : 'https://hashscan.io/testnet/transaction/';
 
-    const fetchPoliciesAndClaims = useCallback(async (phone: string): Promise<Policy[]> => {
-        setIsLoading(true);
-        const loadingToast = toast.loading("Fetching policies and claims...");
-      
-        try {
-          const [policiesResponse, claimsResponse] = await Promise.all([
-            axios.post<{ policies: Policy[] }>(
-              `${API_BASE_URL}/policies`,
-              { phone, page: 1, limit: 10 },
-              { headers: { "Content-Type": "application/json" }, timeout: 10000 }
-            ),
-            axios.post<{ claims: Claim[], success: boolean, total: number }>(
-              `${API_BASE_URL}/get-claims`,
-              { phone },
-              { headers: { "Content-Type": "application/json" }, timeout: 10000 }
-            )
-          ]);
-      
-          const fetchedPolicies = policiesResponse.data.policies || [];
-          const fetchedClaims = claimsResponse.data.claims || [];
-          setPolicies(fetchedPolicies);
-          setClaims(fetchedClaims);
-      
-          // Get the policy IDs that have claims
-          const claimedPolicyIds = new Set(fetchedClaims.map((claim) => claim.policy));
-      
-          // Filter active policies, excluding those with claims
-          const activePoliciesList = fetchedPolicies.filter(
-            (p) =>
-              p.active &&
-              new Date(p.expiryDate) > new Date() &&
-              !claimedPolicyIds.has(p._id)
-          );
-      
-          setActivePolicies(activePoliciesList);
-          setSelectedPolicyId(activePoliciesList.length > 0 ? activePoliciesList[0]._id : null);
-      
-          toast.success("Data loaded", {
-            description: `${activePoliciesList.length} active policies, ${fetchedClaims.length} claims`,
-            id: loadingToast,
-          });
-      
-          return activePoliciesList;
-        } catch (error) {
-          console.error("Failed to fetch policies or claims:", error);
-          setPolicies([]);
-          setActivePolicies([]);
-          setClaims([]);
-          setSelectedPolicyId(null);
-          toast.error("Error loading data", {
-            description: "Failed to fetch policies or claims",
-            id: loadingToast,
-          });
-          return [];
-        } finally {
-          setIsLoading(false);
-        }
-      }, [API_BASE_URL]);
+  const fetchPoliciesAndClaims = useCallback(async (phone: string): Promise<Policy[]> => {
+    setIsLoading(true);
+    const loadingToast = toast.loading("Fetching policies and claims...");
+  
+    try {
+      const [policiesResponse, claimsResponse] = await Promise.all([
+        axios.post<{ policies: Policy[] }>(
+          `${API_BASE_URL}/policies`,
+          { phone, page: 1, limit: 10 },
+          { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+        ),
+        axios.post<{ claims: Claim[], success: boolean, total: number }>(
+          `${API_BASE_URL}/get-claims`,
+          { phone },
+          { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+        )
+      ]);
+  
+      const fetchedPolicies = policiesResponse.data.policies || [];
+      const fetchedClaims = claimsResponse.data.claims || [];
+      setPolicies(fetchedPolicies);
+      setClaims(fetchedClaims);
+  
+      // Get the policy IDs that have claims
+      const claimedPolicyIds = new Set(fetchedClaims.map((claim) => claim.policy));
+  
+      // Filter active policies, excluding those with claims
+      const activePoliciesList = fetchedPolicies.filter(
+        (p) =>
+          p.active &&
+          new Date(p.expiryDate) > new Date() &&
+          !claimedPolicyIds.has(p._id)
+      );
+  
+      setActivePolicies(activePoliciesList);
+      setSelectedPolicyId(activePoliciesList.length > 0 ? activePoliciesList[0]._id : null);
+  
+      toast.success("Data loaded", {
+        description: `${activePoliciesList.length} active policies, ${fetchedClaims.length} claims`,
+        id: loadingToast,
+      });
+  
+      return activePoliciesList;
+    } catch (error) {
+      console.error("Failed to fetch policies or claims:", error);
+      setPolicies([]);
+      setActivePolicies([]);
+      setClaims([]);
+      setSelectedPolicyId(null);
+      toast.error("Error loading data", {
+        description: "Failed to fetch policies or claims",
+        id: loadingToast,
+      });
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, [API_BASE_URL]);
 
   useEffect(() => {
     const isRegistered = localStorage.getItem("isRegistered");
@@ -184,7 +186,7 @@ export default function ClaimsPage() {
       formData.append("details", claimDetails);
       formData.append("image", claimImage);
 
-      const response = await axios.post<{ message: string }>(
+      const response = await axios.post<{ message: string, transactionId?: string, paymentTransactionId?: string }>(
         `${API_BASE_URL}/claim`,
         formData,
         {
@@ -313,11 +315,18 @@ export default function ClaimsPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                           {claim.transactionId ? (
-                            <Link href={`${API_BASE_URL}${claim.transactionId}`} target="_blank" className="text-blue-400 hover:text-blue-300">
+                            <Link href={`${EXPLORER_URL}${claim.transactionId}`} target="_blank" className="text-blue-400 hover:text-blue-300">
+                              <ExternalLink className="h-4 w-4 inline mr-1" />
+                              View Transaction
+                            </Link>
+                          ) : claim.imageUrl ? (
+                            <Link href={`${API_BASE_URL}${claim.imageUrl}`} target="_blank" className="text-blue-400 hover:text-blue-300">
                               <ExternalLink className="h-4 w-4 inline mr-1" />
                               View Evidence
                             </Link>
-                          ) : "No evidence"}
+                          ) : (
+                            "No evidence"
+                          )}
                         </td>
                       </tr>
                     );
