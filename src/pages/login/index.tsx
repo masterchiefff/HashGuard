@@ -55,7 +55,7 @@ export default function LoginPage() {
                 description: "You need to register first. Let’s get started!",
                 id: loadingToast,
             });
-            router.push("/register");
+            router.push("/signup");
             return;
         }
         if (error.code === "ERR_NAME_NOT_RESOLVED") {
@@ -134,7 +134,7 @@ export default function LoginPage() {
           description: "It looks like you haven’t completed registration. Let’s get you set up!",
           id: loadingToast,
         });
-        router.push("/register");
+        router.push("/signup");
       }
     } catch (error: any) {
       let description = "Please try again later";
@@ -147,7 +147,7 @@ export default function LoginPage() {
             description: "You need to complete registration first. Let’s get started!",
             id: loadingToast,
           });
-          router.push("/register");
+          router.push("/signup");
           return;
         }
         description = error.response.status === 400
@@ -213,7 +213,7 @@ export default function LoginPage() {
         {/* Branding Header */}
         <div className="flex items-center mb-8">
           <Shield className="h-8 w-8 mr-2 text-blue-500" />
-          <h1 className="text-2xl font-bold">Boda Shield</h1>
+          <h1 className="text-2xl font-bold">HashGuard</h1>
         </div>
 
         {/* Login Card */}
@@ -230,7 +230,7 @@ export default function LoginPage() {
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               )}
-              <h2 className="text-2xl font-bold">{getStepTitle()}</h2>
+              <h2 className="text-2xl text-gray-400 font-bold">{getStepTitle()}</h2>
             </div>
 
             {step === 1 && (
@@ -263,7 +263,7 @@ export default function LoginPage() {
                 <div className="text-center">
                   <p className="text-sm text-gray-400">
                     Don’t have an account?{" "}
-                    <Link href="/register" className="text-blue-500 hover:underline">Register</Link>
+                    <Link href="/signup" className="text-blue-500 hover:underline">Register</Link>
                   </p>
                 </div>
               </div>

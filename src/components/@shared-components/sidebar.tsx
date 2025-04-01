@@ -77,9 +77,9 @@ export default function Sidebar({ routeName }: { routeName: string }) {
 
                 {/* Crypto Wallet */}
                 <Button
-                    onClick={() => router.push("/crypto-wallet")}
+                    onClick={() => router.push("/wallet")}
                     className={`w-full flex items-center p-2 rounded !justify-start ${
-                        isActive("/crypto-wallet") ? "bg-blue-600 text-blue-800" : "text-gray-300 hover:bg-gray-600"
+                        isActive("/wallet") ? "bg-blue-600 text-blue-800" : "text-gray-300 hover:bg-gray-600"
                     }`}
                     variant="ghost"
                 >

@@ -7,7 +7,6 @@ import { Shield, User, Wallet, CreditCard, LogOut, FileText, ArrowRight, File, A
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import Sidebar from "@/components/@shared-components/sidebar";
 import MainLayout from "@/components/@layouts/main-layout";
 
 export default function OverviewPage() {
@@ -27,13 +26,13 @@ export default function OverviewPage() {
     policyActive: boolean;
     nextPaymentDue: string;
     nextBill: number;
-    walletBalance: number | { low: number; high: number; unsigned?: boolean };
-    hptBalance: number | { low: number; high: number; unsigned?: boolean };
-    recentActivities: { type: string; date: string; amount: number }[];
+    walletBalance: number;
+    hptBalance: number;
+    recentActivities: { type: string; date: string; amount: number; status?: string }[];
   } | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5300";
 
   const defaultOverviewData = {
     riderId: "N/A",
@@ -44,13 +43,6 @@ export default function OverviewPage() {
     walletBalance: 0,
     hptBalance: 0,
     recentActivities: [],
-  };
-
-  // Helper function to parse Hedera number values
-  const parseHederaNumber = (value: number | { low: number; high: number; unsigned?: boolean }): number => {
-    if (typeof value === 'number') return value;
-    if (value?.low !== undefined) return value.low;
-    return 0;
   };
 
   useEffect(() => {
@@ -79,34 +71,86 @@ export default function OverviewPage() {
     const loadingToast = toast.loading("Fetching overview data...");
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/overview`, { phone }, {
+      // Fetch wallet balance
+      const walletResponse = await axios.post(`${API_BASE_URL}/wallet-balance`, { phone }, {
         headers: { "Content-Type": "application/json" },
         timeout: 10000,
       });
 
-      const data = response.data;
+      // Fetch policies
+      const policiesResponse = await axios.post(`${API_BASE_URL}/policies`, {
+        phone,
+        page: 1,
+        limit: 100, // Fetch all policies
+      }, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 10000,
+      });
 
-      // Convert walletBalance and hptBalance if they are objects
-      const convertedData = {
-        ...data,
-        walletBalance: typeof data.walletBalance === 'object' ? 
-          data.walletBalance.low : 
-          data.walletBalance,
-        hptBalance: typeof data.hptBalance === 'object' ? 
-          data.hptBalance.low : 
-          data.hptBalance
-      };
+      // Fetch claims
+      const claimsResponse = await axios.post(`${API_BASE_URL}/claims`, {
+        phone,
+      }, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 10000,
+      });
+
+      const policies = policiesResponse.data.policies || [];
+      const claims = claimsResponse.data.claims || [];
+
+      // Determine insurance status
+      const activePolicies = policies.filter(
+        (policy: any) => policy.active && new Date(policy.expiryDate) > new Date()
+      );
+      const policyActive = activePolicies.length > 0;
+      const nextPaymentDue = policyActive
+        ? activePolicies
+            .map((policy: any) => new Date(policy.expiryDate))
+            .sort((a, b) => a.getTime() - b.getTime())[0]
+            .toLocaleDateString()
+        : "N/A";
+      const nextBill = policyActive ? activePolicies.reduce((sum: number, policy: any) => {
+        return sum + (policy.hbarAmount ? policy.hbarAmount * 12.9 : policy.premiumPaid || 0);
+      }, 0) : 0;
+
+      // Combine policies and claims into recent activities
+      const recentActivities = [
+        ...policies.map((policy: any) => ({
+          type: `Policy Created (${policy.protectionType === "rider" ? "Rider" : "Bike"})`,
+          date: new Date(policy.createdAt).toLocaleString(),
+          amount: policy.hbarAmount ? policy.hbarAmount * 12.9 : policy.premiumPaid || 0,
+          status: policy.active && new Date(policy.expiryDate) > new Date() ? "Active" : "Expired",
+        })),
+        ...claims.map((claim: any) => ({
+          type: "Claim Filed",
+          date: new Date(claim.createdAt).toLocaleString(),
+          amount: claim.premium || 0,
+          status: claim.status || "Pending",
+        })),
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      const fullName = localStorage.getItem("userName") || "User";
+      const riderId = localStorage.getItem("riderId") || "N/A";
 
       setUser({
         phone,
-        name: data.fullName,
+        name: fullName,
         email: localStorage.getItem("userEmail") || "",
         wallet: localStorage.getItem("userWallet") || "",
         idNumber: localStorage.getItem("userId") || "",
-        riderId: data.riderId,
+        riderId,
       });
 
-      setOverviewData(convertedData);
+      setOverviewData({
+        riderId,
+        fullName,
+        policyActive,
+        nextPaymentDue,
+        nextBill,
+        walletBalance: walletResponse.data.walletBalance || 0,
+        hptBalance: 0, // Assuming HPT balance isn't available from wallet-balance; adjust if needed
+        recentActivities,
+      });
 
       toast.success("Overview Loaded", {
         description: "Your account overview is up to date",
@@ -166,127 +210,12 @@ export default function OverviewPage() {
     }
   };
 
-  const handlePayPremium = async () => {
-    if (!user?.phone) {
-      toast.error("Phone Number Missing", {
-        description: "Please log in again to continue.",
-      });
-      router.push("/login");
-      return;
-    }
-
-    setIsLoading(true);
-    const loadingToast = toast.loading("Initiating payment...");
-
-    try {
-      const response = await axios.post(`${API_BASE_URL}/paypremium`, {
-        phone: user.phone,
-        amountKsh: 15,
-      }, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 10000,
-      });
-
-      toast.success("Payment Initiated", {
-        description: response.data.message || "Check your phone to complete the payment",
-        id: loadingToast,
-      });
-
-      let attempts = 0;
-      const maxAttempts = 12;
-      const pollInterval = setInterval(async () => {
-        attempts++;
-        try {
-          await fetchOverviewData(user.phone);
-          if (overviewData?.policyActive || attempts >= maxAttempts) {
-            clearInterval(pollInterval);
-            if (overviewData?.policyActive) {
-              toast.success("Payment Completed", {
-                description: "Your policy is now active!",
-              });
-            } else {
-              toast.info("Payment Pending", {
-                description: "Please complete the payment on your phone.",
-              });
-            }
-          }
-        } catch (error) {
-          if (attempts >= maxAttempts) {
-            clearInterval(pollInterval);
-            toast.info("Payment Pending", {
-              description: "Please complete the payment on your phone.",
-            });
-          }
-        }
-      }, 5000);
-    } catch (error: any) {
-      let description = "Payment failed";
-      if (error.code === "ERR_NAME_NOT_RESOLVED") {
-        description = "Unable to connect to the server. Please check your internet connection or contact support.";
-      } else if (error.response) {
-        description = error.response.status === 400
-          ? error.response.data.error
-          : error.response.data?.error || error.message;
-      } else if (error.request) {
-        description = "No response from the server. Please check your network connection.";
-      } else {
-        description = error.message;
-      }
-      toast.error("Payment Failed", {
-        description,
-        id: loadingToast,
-      });
-    } finally {
-      setIsLoading(false);
-    }
+  const handlePayPremium = () => {
+    router.push("/policies");
   };
 
-  const handleClaim = async () => {
-    if (!user?.phone) {
-      toast.error("Phone Number Missing", {
-        description: "Please log in again to continue.",
-      });
-      router.push("/login");
-      return;
-    }
-
-    setIsLoading(true);
-    const loadingToast = toast.loading("Processing claim...");
-
-    try {
-      const response = await axios.post(`${API_BASE_URL}/claim`, {
-        phone: user.phone,
-      }, {
-        headers: { "Content-Type": "application/json" },
-        timeout: 10000,
-      });
-
-      toast.success("Claim Processed", {
-        description: response.data.message || "Payout triggered successfully",
-        id: loadingToast,
-      });
-
-      await fetchOverviewData(user.phone);
-    } catch (error: any) {
-      let description = "Claim failed";
-      if (error.code === "ERR_NAME_NOT_RESOLVED") {
-        description = "Unable to connect to the server. Please check your internet connection or contact support.";
-      } else if (error.response) {
-        description = error.response.status === 400
-          ? error.response.data.error
-          : error.response.data?.error || error.message;
-      } else if (error.request) {
-        description = "No response from the server. Please check your network connection.";
-      } else {
-        description = error.message;
-      }
-      toast.error("Claim Failed", {
-        description,
-        id: loadingToast,
-      });
-    } finally {
-      setIsLoading(false);
-    }
+  const handleClaim = () => {
+    router.push("/claims");
   };
 
   const handleLogout = () => {
@@ -308,154 +237,160 @@ export default function OverviewPage() {
   return (
     <MainLayout routeName="/">
       <h2 className="text-2xl font-bold mb-2 text-white">
-          Welcome, {displayData.fullName}!
-        </h2>
-        <p className="text-gray-400 mb-2">Rider ID: {displayData.riderId}</p>
-        <p className="text-gray-400 mb-6">
-          Here's an overview of your Boda Shield account.
-        </p>
+        Welcome, {displayData.fullName}!
+      </h2>
+      <p className="text-gray-400 mb-2">Rider ID: {displayData.riderId}</p>
+      <p className="text-gray-400 mb-6">
+        Here's an overview of your Boda Shield account.
+      </p>
 
-        {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          {/* Insurance Status Card */}
-          <Card className="bg-[#2D3748] border-none">
-            <CardHeader>
-              <CardTitle className="flex items-center text-white">
-                <FileText className="h-5 w-5 mr-2 text-blue-500" />
-                Insurance Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400">Policy Active:</span>
-                <span className={displayData.policyActive ? "text-green-500" : "text-red-500"}>
-                  {displayData.policyActive ? "Yes" : "No"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-400">Next Payment Due:</span>
-                <span className="text-white">{displayData.nextPaymentDue}</span>
-              </div>
-              {!displayData.policyActive && (
-                <p className="text-gray-400 text-sm mt-2">
-                  No active policy. Pay a premium to activate your insurance.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Wallet Balance Card */}
-          <Card className="bg-[#2D3748] border-none">
-            <CardHeader>
-              <CardTitle className="flex items-center text-white">
-                <Wallet className="h-5 w-5 mr-2 text-blue-500" />
-                Wallet Balance
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold text-white">
-                {parseHederaNumber(displayData.walletBalance).toFixed(2)} HBAR
-              </p>
-              <p className="text-2xl font-bold text-white mt-2">
-                {parseHederaNumber(displayData.hptBalance)} HPT
-              </p>
-              <p className="text-gray-400 text-sm mt-2 flex items-center">
-                Hedera Wallet:{" "}
-                <a
-                  href={`https://hashscan.io/testnet/account/${user.wallet}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 underline hover:text-blue-300 flex items-center ml-1"
-                >
-                  {user.wallet}
-                  <ExternalLink className="h-4 w-4 ml-1" />
-                </a>
-              </p>
-              {parseHederaNumber(displayData.walletBalance) < 0.1 && (
-                <p className="text-gray-400 text-sm mt-2">
-                  Your HBAR balance is low. Add funds to pay premiums.
-                </p>
-              )}
-              {parseHederaNumber(displayData.hptBalance) < 1500 && (
-                <p className="text-gray-400 text-sm mt-2">
-                  Your HPT balance is low. Acquire HPT to pay premiums.
-                </p>
-              )}
-              {(parseHederaNumber(displayData.walletBalance) < 0.1 || parseHederaNumber(displayData.hptBalance) < 1500) && (
-                <Button
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white mt-4"
-                  onClick={() => window.open("https://portal.hedera.com", "_blank")}
-                >
-                  Deposit Funds
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Quick Actions Card */}
-          <Card className="bg-[#2D3748] border-none">
-            <CardHeader>
-              <CardTitle className="flex items-center text-white">
-                <ArrowRight className="h-5 w-5 mr-2 text-blue-500" />
-                Quick Actions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={handlePayPremium}
-                disabled={isLoading || parseHederaNumber(displayData.hptBalance) < 1500}
-              >
-                <CreditCard className="h-4 w-4 mr-2" />
-                {isLoading ? "Processing..." : "Pay Premium"}
-              </Button>
-              <Button
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={handleClaim}
-                disabled={isLoading || !displayData.policyActive}
-              >
-                <File className="h-4 w-4 mr-2" />
-                {isLoading ? "Processing..." : "File a Claim"}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Activities Card */}
+      {/* Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {/* Insurance Status Card */}
         <Card className="bg-[#2D3748] border-none">
           <CardHeader>
             <CardTitle className="flex items-center text-white">
-              <Activity className="h-5 w-5 mr-2 text-blue-500" />
-              Recent Activities
+              <FileText className="h-5 w-5 mr-2 text-blue-500" />
+              Insurance Status
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {displayData.recentActivities.length > 0 ? (
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-gray-400 border-b border-gray-600">
-                    <th className="py-2">Activity</th>
-                    <th className="py-2">Date</th>
-                    <th className="py-2">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayData.recentActivities.map((activity, index) => (
-                    <tr key={index} className="hover:bg-gray-700">
-                      <td className="py-3 text-white">{activity.type}</td>
-                      <td className="py-3 text-white">{activity.date}</td>
-                      <td className="py-3 text-white">{activity.amount} KSh</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="text-gray-400">
-                No recent activities. Start by paying a premium or filing a claim.
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-gray-400">Policy Active:</span>
+              <span className={displayData.policyActive ? "text-green-500" : "text-red-500"}>
+                {displayData.policyActive ? "Yes" : "No"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-400">Next Payment Due:</span>
+              <span className="text-white">{displayData.nextPaymentDue}</span>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-gray-400">Next Bill:</span>
+              <span className="text-white">{displayData.nextBill.toFixed(2)} KSh</span>
+            </div>
+            {!displayData.policyActive && (
+              <p className="text-gray-400 text-sm mt-2">
+                No active policy. Pay a premium to activate your insurance.
               </p>
             )}
           </CardContent>
         </Card>
+
+        {/* Wallet Balance Card */}
+        <Card className="bg-[#2D3748] border-none">
+          <CardHeader>
+            <CardTitle className="flex items-center text-white">
+              <Wallet className="h-5 w-5 mr-2 text-blue-500" />
+              Wallet Balance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-white">
+              {displayData.walletBalance.toFixed(2)} HBAR
+            </p>
+            <p className="text-2xl font-bold text-white mt-2">
+              {displayData.hptBalance} HPT
+            </p>
+            <p className="text-gray-400 text-sm mt-2 flex items-center">
+              Hedera Wallet:{" "}
+              <a
+                href={`https://hashscan.io/testnet/account/${user.wallet}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 underline hover:text-blue-300 flex items-center ml-1"
+              >
+                {user.wallet}
+                <ExternalLink className="h-4 w-4 ml-1" />
+              </a>
+            </p>
+            {displayData.walletBalance < 0.1 && (
+              <p className="text-gray-400 text-sm mt-2">
+                Your HBAR balance is low. Add funds to pay premiums.
+              </p>
+            )}
+            {displayData.hptBalance < 1500 && (
+              <p className="text-gray-400 text-sm mt-2">
+                Your HPT balance is low. Acquire HPT to pay premiums.
+              </p>
+            )}
+            {(displayData.walletBalance < 0.1 || displayData.hptBalance < 1500) && (
+              <Button
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white mt-4"
+                onClick={() => window.open("https://portal.hedera.com", "_blank")}
+              >
+                Deposit Funds
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Quick Actions Card */}
+        <Card className="bg-[#2D3748] border-none">
+          <CardHeader>
+            <CardTitle className="flex items-center text-white">
+              <ArrowRight className="h-5 w-5 mr-2 text-blue-500" />
+              Quick Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={handlePayPremium}
+              disabled={isLoading}
+            >
+              <CreditCard className="h-4 w-4 mr-2" />
+              Pay Premium
+            </Button>
+            <Button
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={handleClaim}
+              disabled={isLoading || !displayData.policyActive}
+            >
+              <File className="h-4 w-4 mr-2" />
+              File a Claim
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activities Card */}
+      <Card className="bg-[#2D3748] border-none">
+        <CardHeader>
+          <CardTitle className="flex items-center text-white">
+            <Activity className="h-5 w-5 mr-2 text-blue-500" />
+            Recent Activities
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {displayData.recentActivities.length > 0 ? (
+            <table className="w-full text-left">
+              <thead>
+                <tr className="text-gray-400 border-b border-gray-600">
+                  <th className="py-2">Activity</th>
+                  <th className="py-2">Date</th>
+                  <th className="py-2">Amount</th>
+                  <th className="py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayData.recentActivities.map((activity, index) => (
+                  <tr key={index} className="hover:bg-gray-700">
+                    <td className="py-3 text-white">{activity.type}</td>
+                    <td className="py-3 text-white">{activity.date}</td>
+                    <td className="py-3 text-white">{activity.amount.toFixed(2)} KSh</td>
+                    <td className="py-3 text-white">{activity.status || "N/A"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-gray-400">
+              No recent activities. Start by paying a premium or filing a claim.
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </MainLayout>
   );
 }

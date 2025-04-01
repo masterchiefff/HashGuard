@@ -125,7 +125,7 @@ export default function CryptoWalletPage() {
   }
 
   return (
-    <MainLayout>
+    <MainLayout routeName={""}>
         <h2 className="text-2xl font-bold mb-2 text-white">
           Your Crypto Wallet
         </h2>
@@ -147,7 +147,7 @@ export default function CryptoWalletPage() {
                 <p className="text-gray-400">Hedera Wallet Address:</p>
                 <p className="text-white flex items-center">
                   <a
-                    href={`https://explorer.kabuto.sh/testnet/account/${user.wallet}`}
+                    href={`https://hashscan.io/testnet/account/${user.wallet}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-400 underline hover:text-blue-300 flex items-center"
