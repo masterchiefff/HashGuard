@@ -258,7 +258,7 @@ export default function PoliciesPage() {
           throw new Error(response.data.error || 'HBAR payment failed');
         }
       }
-    } catch (error) { // Line 268: 'error' is of type 'unknown'
+    } catch (error: any) { // Line 268: 'error' is of type 'unknown'
       toast.error(error.message || 'Payment failed', { id: toastId });
       setPaymentStep('pay');
     } finally {

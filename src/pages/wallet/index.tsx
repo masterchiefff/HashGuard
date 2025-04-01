@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import Sidebar from "@/components/@shared-components/sidebar";
 import MainLayout from "@/components/@layouts/main-layout";
 
-export default function CryptoWalletPage() {
+export default function WalletPage() {
   const router = useRouter();
   const [user, setUser] = useState<{
     phone: string;
