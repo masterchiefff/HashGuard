@@ -53,7 +53,7 @@ export default function OverviewPage() {
   const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5300";
+  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "https://hashguard-backend.onrender.com";
 
   const defaultOverviewData: OverviewData = {
     riderId: "N/A",

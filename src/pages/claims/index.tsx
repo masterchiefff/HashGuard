@@ -60,7 +60,7 @@ export default function ClaimsPage() {
   const [claimDetails, setClaimDetails] = useState<string>("");
   const [claimImage, setClaimImage] = useState<File | null>(null);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5300";
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://hashguard-backend.onrender.com";
   const PHONE_REGEX = /^\+254\d{9}$/;
   const EXPLORER_URL = process.env.NODE_ENV === 'production' 
     ? 'https://hashscan.io/mainnet/transaction/' 

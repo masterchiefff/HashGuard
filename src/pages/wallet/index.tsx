@@ -26,7 +26,7 @@ export default function WalletPage() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5300";
+  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "https://hashguard-backend.onrender.com";
 
   // Helper function to parse Hedera number values
   const parseHederaNumber = (value: number | { low: number; high: number; unsigned?: boolean }): number => {
