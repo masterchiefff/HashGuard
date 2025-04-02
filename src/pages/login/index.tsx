@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/router"; // Use next/router for Pages Router
 import axios from "axios";
 import { Shield, Phone, ArrowRight, Check, ArrowLeft, LogIn } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,7 +19,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
   const handleSendOTP = async () => {
     const phoneRegex = /^\d{9,10}$/;
@@ -42,12 +42,22 @@ export default function LoginPage() {
         timeout: 10000,
       });
 
-      toast.success("OTP Sent", {
-        description: response.data.message || "Check server console for your verification code",
-        id: loadingToast,
-      });
-
-      setStep(2);
+      if (response.data.otp) {
+        // OTP returned in response (not 0710865696)
+        toast.success("OTP Generated", {
+          description: `Your OTP is: ${response.data.otp}. Enter it below to verify.`,
+          id: loadingToast,
+          duration: 10000, // Show for 10 seconds
+        });
+        setStep(2);
+      } else {
+        // OTP sent via WhatsApp (0710865696)
+        toast.success("OTP Sent", {
+          description: response.data.message || "Check your WhatsApp for the verification code",
+          id: loadingToast,
+        });
+        setStep(2);
+      }
     } catch (error: any) {
       let description = "Please try again later";
       if (error.response && error.response.status === 400 && error.response.data.error === "Phone not registered. Please register first.") {
@@ -82,7 +92,7 @@ export default function LoginPage() {
     const otpString = otp.join("");
     if (!otpString || otpString.length !== 6 || !/^\d{6}$/.test(otpString)) {
       toast.error("Invalid OTP", {
-        description: "Please enter the 6-digit code from the server console",
+        description: "Please enter the 6-digit code",
       });
       return;
     }
@@ -248,7 +258,7 @@ export default function LoginPage() {
                       maxLength={10}
                     />
                   </div>
-                  <p className="text-xs text-gray-400">We'll log a verification code to the server console</p>
+                  <p className="text-xs text-gray-400">We'll send a verification code to this number</p>
                 </div>
                 <Button
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
@@ -280,14 +290,14 @@ export default function LoginPage() {
                         onChange={(e) => handleOtpChange(i, e.target.value)}
                         onPaste={(e) => handleOtpPaste(e, i)}
                         onKeyDown={(e) => handleOtpKeyDown(e, i)}
-                        ref={(el) => { otpRefs.current[i] = el; }} // Changed to void callback
+                        ref={(el) => (otpRefs.current[i] = el)}
                         className="text-center text-lg bg-gray-700 border-none text-white placeholder-gray-500 focus:ring-blue-500 h-12 w-12"
                       />
                     ))}
                   </div>
-                  <p className="text-xs text-gray-400">Enter the 6-digit code from the server console for +254{phoneNumber}</p>
+                  <p className="text-xs text-gray-400">Enter the 6-digit code for +254{phoneNumber}</p>
                   <p className="text-xs text-gray-400 mt-4">
-                    Didn't see the code?{" "}
+                    Didn't receive the code?{" "}
                     <button className="text-blue-500 underline" onClick={handleSendOTP}>Resend</button>
                   </p>
                 </div>

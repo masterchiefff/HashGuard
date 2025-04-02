@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/router"; // Use next/router for Pages Router
 import axios from "axios";
 import { Shield, User, Lock, Phone, ArrowRight, Check, Mail, ArrowLeft } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,10 +22,9 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"; 
+  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
   const handleSendOTP = async () => {
-    // Validate phone number
     const phoneRegex = /^\d{9,10}$/;
     if (!phoneNumber || !phoneRegex.test(phoneNumber)) {
       toast.error("Invalid Phone Number", {
@@ -43,15 +42,23 @@ export default function RegisterPage() {
         phone: formattedPhone,
       }, {
         headers: { "Content-Type": "application/json" },
-        timeout: 10000, // 10 seconds timeout
+        timeout: 10000,
       });
 
-      toast.success("OTP Sent", {
-        description: response.data.message || "A verification code has been sent to your WhatsApp",
-        id: loadingToast,
-      });
-
-      setStep(2);
+      if (response.data.otp) {
+        toast.success("OTP Generated", {
+          description: `Your OTP is: ${response.data.otp}. Enter it below to verify.`,
+          id: loadingToast,
+          duration: 10000,
+        });
+        setStep(2);
+      } else {
+        toast.success("OTP Sent", {
+          description: response.data.message || "A verification code has been sent to your WhatsApp",
+          id: loadingToast,
+        });
+        setStep(2);
+      }
     } catch (error: any) {
       let description = "Please try again later";
       if (error.code === "ERR_NAME_NOT_RESOLVED") {
@@ -78,7 +85,7 @@ export default function RegisterPage() {
     const otpString = otp.join("");
     if (!otpString || otpString.length !== 6 || !/^\d{6}$/.test(otpString)) {
       toast.error("Invalid OTP", {
-        description: "Please enter the 6-digit code sent to your phone",
+        description: "Please enter the 6-digit code",
       });
       return;
     }
@@ -116,7 +123,6 @@ export default function RegisterPage() {
   };
 
   const handleCompleteRegistration = async () => {
-    // Validate inputs
     if (!fullName || fullName.trim().length < 2) {
       toast.error("Name Required", { description: "Please enter a valid full name (at least 2 characters)" });
       return;
@@ -159,13 +165,12 @@ export default function RegisterPage() {
       idNumber: idNumber.trim(),
     }, {
       headers: { "Content-Type": "application/json" },
-      timeout: 30000, // 30 seconds timeout for wallet creation
+      timeout: 30000,
     });
 
     const walletId: string = response.data.wallet;
     const riderId: string = response.data.riderId;
 
-    // Store user data in localStorage
     localStorage.setItem("userPhone", formattedPhone);
     localStorage.setItem("userName", fullName.trim());
     localStorage.setItem("userEmail", email.toLowerCase().trim());
@@ -228,13 +233,11 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-[#1A202C] text-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Branding Header */}
         <div className="flex items-center mb-8">
           <Shield className="h-8 w-8 mr-2 text-blue-500" />
           <h1 className="text-2xl font-bold">HashGuard</h1>
         </div>
 
-        {/* Registration Card */}
         <Card className="bg-[#2D3748] border-none">
           <CardContent className="p-6">
             <div className="flex items-center mb-6">
