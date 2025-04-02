@@ -6,6 +6,9 @@ import axios from "axios";
 import { Shield, User, Wallet, CreditCard, LogOut, FileText, ArrowRight, File, Activity, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input"; // Assuming you have an Input component
+import { Label } from "@/components/ui/label"; // Assuming you have a Label component
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"; // Modal components
 import { toast } from "sonner";
 import MainLayout from "@/components/@layouts/main-layout";
 
@@ -31,6 +34,8 @@ export default function OverviewPage() {
     recentActivities: { type: string; date: string; amount: number; status?: string }[];
   } | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+  const [depositAmount, setDepositAmount] = useState<string>("");
 
   const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5300";
 
@@ -48,9 +53,7 @@ export default function OverviewPage() {
   useEffect(() => {
     const isRegistered = localStorage.getItem("isRegistered");
     if (!isRegistered || isRegistered !== "true") {
-      toast.error("Session Expired", {
-        description: "Please log in to continue.",
-      });
+      toast.error("Session Expired", { description: "Please log in to continue." });
       router.push("/login");
       return;
     }
@@ -59,9 +62,7 @@ export default function OverviewPage() {
     if (phone) {
       fetchOverviewData(phone);
     } else {
-      toast.error("Session Expired", {
-        description: "No phone number found. Please log in again.",
-      });
+      toast.error("Session Expired", { description: "No phone number found. Please log in again." });
       router.push("/login");
     }
   }, [router]);
@@ -71,23 +72,20 @@ export default function OverviewPage() {
     const loadingToast = toast.loading("Fetching overview data...");
 
     try {
-      // Fetch wallet balance
       const walletResponse = await axios.post(`${API_BASE_URL}/wallet-balance`, { phone }, {
         headers: { "Content-Type": "application/json" },
         timeout: 10000,
       });
 
-      // Fetch policies
       const policiesResponse = await axios.post(`${API_BASE_URL}/policies`, {
         phone,
         page: 1,
-        limit: 100, // Fetch all policies
+        limit: 100,
       }, {
         headers: { "Content-Type": "application/json" },
         timeout: 10000,
       });
 
-      // Fetch claims
       const claimsResponse = await axios.post(`${API_BASE_URL}/claims`, {
         phone,
       }, {
@@ -98,7 +96,6 @@ export default function OverviewPage() {
       const policies = policiesResponse.data.policies || [];
       const claims = claimsResponse.data.claims || [];
 
-      // Determine insurance status
       const activePolicies = policies.filter(
         (policy: any) => policy.active && new Date(policy.expiryDate) > new Date()
       );
@@ -113,7 +110,6 @@ export default function OverviewPage() {
         return sum + (policy.hbarAmount ? policy.hbarAmount * 12.9 : policy.premiumPaid || 0);
       }, 0) : 0;
 
-      // Combine policies and claims into recent activities
       const recentActivities = [
         ...policies.map((policy: any) => ({
           type: `Policy Created (${policy.protectionType === "rider" ? "Rider" : "Bike"})`,
@@ -148,7 +144,7 @@ export default function OverviewPage() {
         nextPaymentDue,
         nextBill,
         walletBalance: walletResponse.data.walletBalance || 0,
-        hptBalance: 0, // Assuming HPT balance isn't available from wallet-balance; adjust if needed
+        hptBalance: 0,
         recentActivities,
       });
 
@@ -222,6 +218,46 @@ export default function OverviewPage() {
     localStorage.clear();
     toast.success("Logged Out", { description: "You have been logged out successfully" });
     router.push("/login");
+  };
+
+  const handleDeposit = async () => {
+    if (!depositAmount || parseFloat(depositAmount) <= 0) {
+      toast.error("Invalid Amount", { description: "Please enter a valid HBAR amount." });
+      return;
+    }
+
+    setIsLoading(true);
+    const loadingToast = toast.loading("Processing deposit...");
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/credit-hbar`, {
+        phone: user?.phone,
+        amount: parseFloat(depositAmount),
+      }, {
+        headers: { "Content-Type": "application/json" },
+        timeout: 10000,
+      });
+
+      toast.success("Deposit Successful", {
+        description: `${depositAmount} HBAR credited to your wallet. Transaction ID: ${response.data.transactionId}`,
+        id: loadingToast,
+      });
+
+      // Refresh overview data after deposit
+      if (user?.phone) {
+        await fetchOverviewData(user.phone);
+      }
+
+      setDepositAmount("");
+      setIsDepositModalOpen(false);
+    } catch (error: any) {
+      toast.error("Deposit Failed", {
+        description: error.response?.data?.error || error.message || "An error occurred while processing your deposit.",
+        id: loadingToast,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!user || !overviewData) {
@@ -304,23 +340,26 @@ export default function OverviewPage() {
                 <ExternalLink className="h-4 w-4 ml-1" />
               </a>
             </p>
-            {displayData.walletBalance < 0.1 && (
-              <p className="text-gray-400 text-sm mt-2">
-                Your HBAR balance is low. Add funds to pay premiums.
-              </p>
-            )}
-            {displayData.hptBalance < 1500 && (
-              <p className="text-gray-400 text-sm mt-2">
-                Your HPT balance is low. Acquire HPT to pay premiums.
-              </p>
-            )}
             {(displayData.walletBalance < 0.1 || displayData.hptBalance < 1500) && (
-              <Button
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white mt-4"
-                onClick={() => window.open("https://portal.hedera.com", "_blank")}
-              >
-                Deposit Funds
-              </Button>
+              <>
+                {displayData.walletBalance < 0.1 && (
+                  <p className="text-gray-400 text-sm mt-2">
+                    Your HBAR balance is low. Add funds to pay premiums.
+                  </p>
+                )}
+                {displayData.hptBalance < 1500 && (
+                  <p className="text-gray-400 text-sm mt-2">
+                    Your HPT balance is low. Acquire HPT to pay premiums.
+                  </p>
+                )}
+                <Button
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white mt-4"
+                  onClick={() => setIsDepositModalOpen(true)}
+                  disabled={isLoading}
+                >
+                  Deposit Funds
+                </Button>
+              </>
             )}
           </CardContent>
         </Card>
@@ -391,6 +430,56 @@ export default function OverviewPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Deposit Modal */}
+      <Dialog open={isDepositModalOpen} onOpenChange={setIsDepositModalOpen}>
+        <DialogContent className="bg-[#2D3748] text-white border-none">
+          <DialogHeader>
+            <DialogTitle>Deposit HBAR</DialogTitle>
+            <p className="text-gray-400 text-sm mt-2">Here You can just deposit HBAR for testing from the company's wallet directly. PLEASE USE IT SPARINGLY!!! YOU CAN DEPOSIT MAX 100</p>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                value={user?.phone || ""}
+                disabled
+                className="bg-[#1A202C] text-white border-gray-600"
+              />
+            </div>
+            <div>
+              <Label htmlFor="amount">Amount (HBAR)</Label>
+              <Input
+                id="amount"
+                type="number"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder="Enter amount in HBAR"
+                className="bg-[#1A202C] text-white border-gray-600"
+                min="0"
+                step="0.01"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDepositModalOpen(false)}
+              className="text-white border-gray-600 hover:bg-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeposit}
+              disabled={isLoading || !depositAmount}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Deposit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }
