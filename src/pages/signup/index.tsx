@@ -20,6 +20,7 @@ export default function RegisterPage() {
   const [idNumber, setIdNumber] = useState<string>("");
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [otpReceived, setOtpReceived] = useState<string>("");
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -44,13 +45,15 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         timeout: 10000,
       });
-
       if (response.data.otp) {
         toast.success("OTP Generated", {
           description: `Your OTP is: ${response.data.otp}. Enter it below to verify.`,
           id: loadingToast,
           duration: 10000,
         });
+
+        setOtpReceived(response.data.otp);
+
         setStep(2);
       } else {
         toast.success("OTP Sent", {
@@ -233,6 +236,12 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-[#1A202C] text-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+      {otpReceived && (
+          <div className="mb-4 p-4 bg-green-600 rounded-md text-center">
+            <h3 className="font-bold">Your OTP: {otpReceived}</h3>
+            <p className="text-sm">Enter this code below to verify your number</p>
+          </div>
+        )}
         <div className="flex items-center mb-8">
           <Shield className="h-8 w-8 mr-2 text-blue-500" />
           <h1 className="text-2xl font-bold">HashGuard</h1>
