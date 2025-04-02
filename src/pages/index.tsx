@@ -414,7 +414,7 @@ export default function OverviewPage() {
       </Card>
   
       {/* System Activities Table */}
-      <Card className="bg-[#2D3748] border-none">
+      {/* <Card className="bg-[#2D3748] border-none">
         <CardHeader>
           <CardTitle className="flex items-center text-white">
             <Activity className="h-5 w-5 mr-2 text-blue-500" />
@@ -449,10 +449,10 @@ export default function OverviewPage() {
             <p className="text-gray-400">No activities recorded yet.</p>
           )}
         </CardContent>
-      </Card>
+      </Card> */}
   
       {/* Deposit Modal */}
-      <Dialog open={isDepositModalOpen} onOpenChange={setIsDepositModalOpen}>
+      {/* <Dialog open={isDepositModalOpen} onOpenChange={setIsDepositModalOpen}>
         <DialogContent className="bg-[#2D3748] text-white border-none">
           <DialogHeader>
             <DialogTitle>Deposit HBAR</DialogTitle>
@@ -520,7 +520,7 @@ export default function OverviewPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
     </MainLayout>
   );
 }
