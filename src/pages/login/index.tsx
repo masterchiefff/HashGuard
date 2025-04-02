@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router"; // Use next/router for Pages Router
 import axios from "axios";
 import { Shield, Phone, ArrowRight, Check, ArrowLeft, LogIn } from "lucide-react";
@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [phoneNumber, setPhoneNumber] = useState<string>("");
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [otpReceived, setOtpReceived] = useState<string>("");
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
@@ -42,8 +43,22 @@ export default function LoginPage() {
         timeout: 10000,
       });
 
+      // Store the OTP to display in the title
       if (response.data.otp) {
-        // OTP returned in response (not 0710865696)
+        setOtpReceived(response.data.otp);
+      }
+
+      // Updated: Always expect OTP in response and mention WhatsApp
+      toast.success("OTP Sent", {
+        description: `Your OTP is: ${response.data.otp}. Check WhatsApp or enter it below to verify.`,
+        id: loadingToast,
+        duration: 10000, // Show for 10 seconds
+      });
+      setStep(2);
+
+      // Kept original conditional block (though now redundant) to preserve functionality
+      if (response.data.otp) {
+        // OTP returned in response (now always true)
         toast.success("OTP Generated", {
           description: `Your OTP is: ${response.data.otp}. Enter it below to verify.`,
           id: loadingToast,
@@ -51,7 +66,7 @@ export default function LoginPage() {
         });
         setStep(2);
       } else {
-        // OTP sent via WhatsApp (0710865696)
+        // OTP sent via WhatsApp (won't trigger but kept for original behavior)
         toast.success("OTP Sent", {
           description: response.data.message || "Check your WhatsApp for the verification code",
           id: loadingToast,
@@ -62,7 +77,7 @@ export default function LoginPage() {
       let description = "Please try again later";
       if (error.response && error.response.status === 400 && error.response.data.error === "Phone not registered. Please register first.") {
         toast.info("New User Detected", {
-          description: "You need to register first. Let’s get started!",
+          description: "You need to register first. Let's get started!",
           id: loadingToast,
         });
         router.push("/signup");
@@ -138,7 +153,7 @@ export default function LoginPage() {
         localStorage.setItem("phoneVerified", "true");
         localStorage.setItem("userPhone", formattedPhone);
         toast.info("Complete Registration", {
-          description: "It looks like you haven’t completed registration. Let’s get you set up!",
+          description: "It looks like you haven't completed registration. Let's get you set up!",
           id: loadingToast,
         });
         router.push("/signup");
@@ -151,7 +166,7 @@ export default function LoginPage() {
           localStorage.setItem("phoneVerified", "true");
           localStorage.setItem("userPhone", formattedPhone);
           toast.info("New User Detected", {
-            description: "You need to complete registration first. Let’s get started!",
+            description: "You need to complete registration first. Let's get started!",
             id: loadingToast,
           });
           router.push("/signup");
@@ -214,9 +229,31 @@ export default function LoginPage() {
     }
   };
 
+  // Pre-fill OTP fields if OTP is received in development mode
+  useEffect(() => {
+    if (otpReceived && step === 2) {
+      const otpDigits = otpReceived.split('');
+      if (otpDigits.length === 6) {
+        const newOtp = [...otp];
+        otpDigits.forEach((digit, index) => {
+          newOtp[index] = digit;
+        });
+        setOtp(newOtp);
+      }
+    }
+  }, [otpReceived, step]);
+
   return (
     <div className="min-h-screen bg-[#1A202C] text-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        {/* Hidden OTP Title that becomes visible when OTP is received */}
+        {otpReceived && (
+          <div className="mb-4 p-4 bg-green-600 rounded-md text-center">
+            <h3 className="font-bold">Your OTP: {otpReceived}</h3>
+            <p className="text-sm">Enter this code below to verify your number</p>
+          </div>
+        )}
+
         {/* Branding Header */}
         <div className="flex items-center mb-8">
           <Shield className="h-8 w-8 mr-2 text-blue-500" />
@@ -269,7 +306,7 @@ export default function LoginPage() {
                 </Button>
                 <div className="text-center">
                   <p className="text-sm text-gray-400">
-                    Don’t have an account?{" "}
+                    Don't have an account?{" "}
                     <Link href="/signup" className="text-blue-500 hover:underline">Register</Link>
                   </p>
                 </div>
@@ -329,6 +366,8 @@ export default function LoginPage() {
             </p>
           </CardContent>
         </Card>
+
+        <p className="text-xs text-center text-gray-400 mt-6">You will receive the <span className="text-blue-500 font-bold text-green-500">OTP via Sonner/alert</span> if you did not receive it via WhatsApp</p>
       </div>
     </div>
   );

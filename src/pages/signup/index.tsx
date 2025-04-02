@@ -441,6 +441,7 @@ export default function RegisterPage() {
             </p>
           </CardContent>
         </Card>
+        <p className="text-xs text-center text-gray-400 mt-6">You will receive the <span className="text-blue-500 font-bold text-green-500">OTP via Sonner/alert</span> if you did not receive it via whatsapp</p>
       </div>
     </div>
   );
