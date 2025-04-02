@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useRouter } from "next/router"; // Use next/router for Pages Router
+import { useRouter } from "next/router";
 import axios from "axios";
 import { Shield, User, Lock, Phone, ArrowRight, Check, Mail, ArrowLeft } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,9 +21,10 @@ export default function RegisterPage() {
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [otpReceived, setOtpReceived] = useState<string>("");
+  const [token, setToken] = useState<string>(""); // Store JWT token
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
   const handleSendOTP = async () => {
     const phoneRegex = /^\d{9,10}$/;
@@ -45,40 +46,31 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         timeout: 10000,
       });
+
       if (response.data.otp) {
         toast.success("OTP Generated", {
           description: `Your OTP is: ${response.data.otp}. Enter it below to verify.`,
           id: loadingToast,
           duration: 10000,
         });
-
         setOtpReceived(response.data.otp);
-
-        setStep(2);
       } else {
         toast.success("OTP Sent", {
-          description: response.data.message || "A verification code has been sent to your WhatsApp",
+          description: response.data.message || "Check your WhatsApp for the verification code",
           id: loadingToast,
         });
-        setStep(2);
       }
+      setStep(2);
     } catch (error: any) {
       let description = "Please try again later";
-      if (error.code === "ERR_NAME_NOT_RESOLVED") {
-        description = "Unable to connect to the server. Please check your internet connection or contact support.";
+      if (error.response?.status === 400 && error.response.data.error === "Phone already fully registered") {
+        description = "This phone number is already registered. Please log in.";
       } else if (error.response) {
-        description = error.response.status === 400
-          ? error.response.data.error
-          : error.response.data?.error || error.message;
+        description = error.response.data.error || "An error occurred";
       } else if (error.request) {
-        description = "No response from the server. Please check your network connection.";
-      } else {
-        description = error.message;
+        description = "No response from server. Check your network.";
       }
-      toast.error("Failed to Send OTP", {
-        description,
-        id: loadingToast,
-      });
+      toast.error("Failed to Send OTP", { description, id: loadingToast });
     } finally {
       setIsLoading(false);
     }
@@ -87,9 +79,7 @@ export default function RegisterPage() {
   const handleVerifyOTP = async () => {
     const otpString = otp.join("");
     if (!otpString || otpString.length !== 6 || !/^\d{6}$/.test(otpString)) {
-      toast.error("Invalid OTP", {
-        description: "Please enter the 6-digit code",
-      });
+      toast.error("Invalid OTP", { description: "Please enter a 6-digit code" });
       return;
     }
 
@@ -106,20 +96,17 @@ export default function RegisterPage() {
         timeout: 10000,
       });
 
+      setToken(response.data.token); // Store JWT token
       toast.success("OTP Verified", {
         description: response.data.message || "Phone number verified successfully",
         id: loadingToast,
       });
-
       setStep(3);
     } catch (error: any) {
       const description = error.response?.status === 400
-        ? error.response.data.error
-        : error.response?.data?.error || error.message || "Please check the code and try again";
-      toast.error("Verification Failed", {
-        description,
-        id: loadingToast,
-      });
+        ? error.response.data.error || "Invalid OTP"
+        : error.response?.data?.error || "Verification failed";
+      toast.error("Verification Failed", { description, id: loadingToast });
     } finally {
       setIsLoading(false);
     }
@@ -127,16 +114,16 @@ export default function RegisterPage() {
 
   const handleCompleteRegistration = async () => {
     if (!fullName || fullName.trim().length < 2) {
-      toast.error("Name Required", { description: "Please enter a valid full name (at least 2 characters)" });
+      toast.error("Name Required", { description: "Enter a valid full name (min 2 characters)" });
       return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !emailRegex.test(email)) {
-      toast.error("Email Required", { description: "Please enter a valid email address" });
+      toast.error("Email Required", { description: "Enter a valid email address" });
       return;
     }
     if (!idNumber || idNumber.trim().length < 6) {
-      toast.error("ID Number Required", { description: "Please enter a valid national ID number (at least 6 characters)" });
+      toast.error("ID Number Required", { description: "Enter a valid ID number (min 6 characters)" });
       return;
     }
 
@@ -150,13 +137,11 @@ export default function RegisterPage() {
     } catch (error: any) {
       const description = error.response?.status === 400
         ? error.response.data.error
-        : error.response?.data?.error || error.message || "Please try again later";
-      toast.error("Registration Failed", {
-        description,
-        id: loadingToast,
-      });
-      setIsLoading(false);
+        : error.response?.data?.error || "Registration failed";
+      toast.error("Registration Failed", { description, id: loadingToast });
       setStep(3);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -167,27 +152,29 @@ export default function RegisterPage() {
       email: email.toLowerCase().trim(),
       idNumber: idNumber.trim(),
     }, {
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`, // Include JWT token
+      },
       timeout: 30000,
     });
 
-    const walletId: string = response.data.wallet;
-    const riderId: string = response.data.riderId;
+    const { wallet, riderId } = response.data;
 
     localStorage.setItem("userPhone", formattedPhone);
     localStorage.setItem("userName", fullName.trim());
     localStorage.setItem("userEmail", email.toLowerCase().trim());
     localStorage.setItem("userId", idNumber.trim());
-    localStorage.setItem("userWallet", walletId);
+    localStorage.setItem("userWallet", wallet);
     localStorage.setItem("riderId", riderId);
+    localStorage.setItem("token", token); // Store token for future authenticated requests
     localStorage.setItem("isRegistered", "true");
 
     toast.success("Registration Successful", {
-      description: `Your Hedera wallet (${walletId}) has been created. Rider ID: ${riderId}`,
+      description: `Your wallet (${wallet}) and Rider ID (${riderId}) are ready!`,
       id: loadingToast,
     });
 
-    setIsLoading(false);
     router.push("/");
   };
 
@@ -196,10 +183,7 @@ export default function RegisterPage() {
     const newOtp = [...otp];
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
-
-    if (value && index < 5) {
-      otpRefs.current[index + 1]?.focus();
-    }
+    if (value && index < 5) otpRefs.current[index + 1]?.focus();
   };
 
   const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
@@ -211,7 +195,6 @@ export default function RegisterPage() {
         newOtp[index + i] = pastedData[i];
       }
       setOtp(newOtp);
-
       const nextFocus = Math.min(index + pastedData.length, 5);
       otpRefs.current[nextFocus]?.focus();
     }
@@ -228,7 +211,7 @@ export default function RegisterPage() {
       case 1: return "Create Your Account";
       case 2: return "Verify Your Number";
       case 3: return "Complete Your Profile";
-      case 4: return "Creating Your Wallet";
+      case 4: return "Setting Up Your Wallet";
       default: return "Register";
     }
   };
@@ -236,7 +219,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-[#1A202C] text-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-      {otpReceived && (
+        {otpReceived && (
           <div className="mb-4 p-4 bg-green-600 rounded-md text-center">
             <h3 className="font-bold">Your OTP: {otpReceived}</h3>
             <p className="text-sm">Enter this code below to verify your number</p>
@@ -279,7 +262,7 @@ export default function RegisterPage() {
                       maxLength={10}
                     />
                   </div>
-                  <p className="text-xs text-gray-400">We'll send a verification code to this number</p>
+                  <p className="text-xs text-gray-400">We'll send a code to this number via WhatsApp</p>
                 </div>
                 <Button
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
@@ -290,7 +273,7 @@ export default function RegisterPage() {
                 </Button>
                 <div className="text-center">
                   <p className="text-sm text-gray-400">
-                    Already have an account?{" "}
+                    Already registered?{" "}
                     <Link href="/login" className="text-blue-500 hover:underline">Login</Link>
                   </p>
                 </div>
@@ -318,7 +301,7 @@ export default function RegisterPage() {
                   </div>
                   <p className="text-xs text-gray-400">Enter the 6-digit code sent to +254{phoneNumber}</p>
                   <p className="text-xs text-gray-400 mt-4">
-                    Didn't receive the code?{" "}
+                    Didn't receive it?{" "}
                     <button className="text-blue-500 underline" onClick={handleSendOTP}>Resend</button>
                   </p>
                 </div>
@@ -336,7 +319,7 @@ export default function RegisterPage() {
                     onClick={handleVerifyOTP}
                     disabled={isLoading}
                   >
-                    {isLoading ? "Verifying..." : <>Continue <ArrowRight className="ml-2 h-4 w-4" /></>}
+                    {isLoading ? "Verifying..." : <>Verify <ArrowRight className="ml-2 h-4 w-4" /></>}
                   </Button>
                 </div>
               </div>
@@ -369,7 +352,7 @@ export default function RegisterPage() {
                       <Input
                         id="email"
                         type="email"
-                        placeholder="Enter your email address"
+                        placeholder="Enter your email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="rounded-l-none bg-gray-700 border-none text-white placeholder-gray-500 focus:ring-blue-500"
@@ -406,7 +389,7 @@ export default function RegisterPage() {
                     onClick={handleCompleteRegistration}
                     disabled={isLoading}
                   >
-                    {isLoading ? "Processing..." : <>Complete Registration <ArrowRight className="ml-2 h-4 w-4" /></>}
+                    {isLoading ? "Processing..." : <>Finish <ArrowRight className="ml-2 h-4 w-4" /></>}
                   </Button>
                 </div>
               </div>
@@ -418,10 +401,8 @@ export default function RegisterPage() {
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
                 </div>
                 <div className="space-y-2 text-center">
-                  <p className="text-gray-400">Creating your Hedera wallet...</p>
-                  <p className="text-xs text-gray-400">
-                    This will only take a moment. We're setting up your secure blockchain wallet.
-                  </p>
+                  <p className="text-gray-400">Setting up your Hedera wallet...</p>
+                  <p className="text-xs text-gray-400">This may take a moment. Please wait.</p>
                 </div>
                 <div className="space-y-2 mt-8">
                   <div className="flex items-center space-x-2 text-gray-400">
@@ -436,7 +417,7 @@ export default function RegisterPage() {
                     <div className="h-4 w-4 animate-pulse">
                       <div className="h-2 w-2 bg-blue-500 rounded-full mx-auto mt-1"></div>
                     </div>
-                    <p className="text-sm">Linking to your phone number</p>
+                    <p className="text-sm">Finalizing registration</p>
                   </div>
                 </div>
               </div>
@@ -444,13 +425,15 @@ export default function RegisterPage() {
 
             <p className="text-xs text-center text-gray-400 mt-6">
               By continuing, you agree to our{" "}
-              <Link href="/terms" className="text-blue-500 hover:underline">Terms of Service</Link>{" "}
+              <Link href="/terms" className="text-blue-500 hover:underline">Terms</Link>{" "}
               and{" "}
               <Link href="/privacy" className="text-blue-500 hover:underline">Privacy Policy</Link>
             </p>
           </CardContent>
         </Card>
-        <p className="text-xs text-center text-gray-400 mt-6">You will receive the <span className="text-blue-500 font-bold text-green-500">OTP via Sonner/alert</span> if you did not receive it via whatsapp</p>
+        <p className="text-xs text-center text-gray-400 mt-6">
+          OTP will be sent via WhatsApp or displayed here if WhatsApp fails
+        </p>
       </div>
     </div>
   );

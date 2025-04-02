@@ -20,7 +20,7 @@ export default function LoginPage() {
   const [otpReceived, setOtpReceived] = useState<string>("");
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+  const API_BASE_URL: string = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"; // Adjusted to match your backend port
 
   const handleSendOTP = async () => {
     const phoneRegex = /^\d{9,10}$/;
@@ -43,54 +43,38 @@ export default function LoginPage() {
         timeout: 10000,
       });
 
-      // Store the OTP to display in the title
+      // Handle OTP from response (development mode)
       if (response.data.otp) {
         setOtpReceived(response.data.otp);
-      }
-
-      // Updated: Always expect OTP in response and mention WhatsApp
-      toast.success("OTP Sent", {
-        description: `Your OTP is: ${response.data.otp}. Check WhatsApp or enter it below to verify.`,
-        id: loadingToast,
-        duration: 10000, // Show for 10 seconds
-      });
-      setStep(2);
-
-      // Kept original conditional block (though now redundant) to preserve functionality
-      if (response.data.otp) {
-        // OTP returned in response (now always true)
-        toast.success("OTP Generated", {
-          description: `Your OTP is: ${response.data.otp}. Enter it below to verify.`,
-          id: loadingToast,
-          duration: 10000, // Show for 10 seconds
-        });
-        setStep(2);
-      } else {
-        // OTP sent via WhatsApp (won't trigger but kept for original behavior)
         toast.success("OTP Sent", {
-          description: response.data.message || "Check your WhatsApp for the verification code",
+          description: `Your OTP is: ${response.data.otp}. Check WhatsApp or enter it below.`,
+          id: loadingToast,
+          duration: 10000,
+        });
+      } else {
+        toast.success("OTP Sent", {
+          description: "Check your WhatsApp for the verification code.",
           id: loadingToast,
         });
-        setStep(2);
       }
+
+      setStep(2);
     } catch (error: any) {
       let description = "Please try again later";
-      if (error.response && error.response.status === 400 && error.response.data.error === "Phone not registered. Please register first.") {
+      if (error.response?.status === 400 && error.response.data.error === "Phone not registered. Please register first.") {
         toast.info("New User Detected", {
-          description: "You need to register first. Let's get started!",
+          description: "You need to register first. Redirecting to signup...",
           id: loadingToast,
         });
         router.push("/signup");
         return;
       }
       if (error.code === "ERR_NAME_NOT_RESOLVED") {
-        description = "Unable to connect to the server. Please check your internet connection or contact support.";
+        description = "Unable to connect to the server. Check your internet or contact support.";
       } else if (error.response) {
-        description = error.response.status === 400
-          ? error.response.data.error
-          : error.response.data?.error || error.message;
+        description = error.response.data?.error || error.message;
       } else if (error.request) {
-        description = "No response from the server. Please check your network connection.";
+        description = "No response from server. Check your network.";
       } else {
         description = error.message;
       }
@@ -107,7 +91,7 @@ export default function LoginPage() {
     const otpString = otp.join("");
     if (!otpString || otpString.length !== 6 || !/^\d{6}$/.test(otpString)) {
       toast.error("Invalid OTP", {
-        description: "Please enter the 6-digit code",
+        description: "Please enter a 6-digit code",
       });
       return;
     }
@@ -117,7 +101,7 @@ export default function LoginPage() {
 
     try {
       const formattedPhone = `+254${phoneNumber.replace(/^0/, "")}`;
-      const response = await axios.post(`${API_BASE_URL}/verify`, {
+      const verifyResponse = await axios.post(`${API_BASE_URL}/verify`, {
         phone: formattedPhone,
         otp: otpString,
       }, {
@@ -125,58 +109,62 @@ export default function LoginPage() {
         timeout: 10000,
       });
 
+      // Store JWT token from /verify response
+      const token = verifyResponse.data.token;
+      if (!token) throw new Error("No token received from verification");
+      localStorage.setItem("token", token);
+
+      // Fetch user status
       const userStatusResponse = await axios.post(`${API_BASE_URL}/user-status`, {
         phone: formattedPhone,
       }, {
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
         timeout: 10000,
       });
 
       const userData = userStatusResponse.data;
 
-      if (userData.active !== undefined) {
-        localStorage.setItem("isRegistered", "true");
-        localStorage.setItem("userPhone", formattedPhone);
-        localStorage.setItem("userWallet", userData.wallet || "");
-        localStorage.setItem("userName", userData.fullName || "");
-        localStorage.setItem("userEmail", userData.email || "");
-        localStorage.setItem("userId", userData.idNumber || "");
-        localStorage.setItem("riderId", userData.riderId || "");
+      // Store user data in localStorage
+      localStorage.setItem("isRegistered", userData.active ? "true" : "false");
+      localStorage.setItem("userPhone", formattedPhone);
+      localStorage.setItem("userWallet", userData.wallet || "");
+      localStorage.setItem("userName", userData.fullName || "");
+      localStorage.setItem("userEmail", userData.email || "");
+      localStorage.setItem("userId", userData.idNumber || "");
+      localStorage.setItem("riderId", userData.riderId || "");
 
+      if (userData.active) {
         toast.success("Login Successful", {
           description: "Welcome back to HashGuard!",
           id: loadingToast,
         });
-
         router.push("/");
       } else {
-        localStorage.setItem("phoneVerified", "true");
-        localStorage.setItem("userPhone", formattedPhone);
         toast.info("Complete Registration", {
-          description: "It looks like you haven't completed registration. Let's get you set up!",
+          description: "Please complete your registration to continue.",
           id: loadingToast,
         });
         router.push("/signup");
       }
     } catch (error: any) {
       let description = "Please try again later";
-      if (error.response) {
-        if (error.response.status === 400 && error.response.data.error === "Rider not registered") {
-          const formattedPhone = `+254${phoneNumber.replace(/^0/, "")}`;
-          localStorage.setItem("phoneVerified", "true");
-          localStorage.setItem("userPhone", formattedPhone);
-          toast.info("New User Detected", {
-            description: "You need to complete registration first. Let's get started!",
-            id: loadingToast,
-          });
-          router.push("/signup");
-          return;
-        }
-        description = error.response.status === 400
-          ? error.response.data.error
-          : error.response.data?.error || error.message;
+      if (error.response?.status === 400 && error.response.data.error === "Rider not registered") {
+        const formattedPhone = `+254${phoneNumber.replace(/^0/, "")}`;
+        localStorage.setItem("phoneVerified", "true");
+        localStorage.setItem("userPhone", formattedPhone);
+        toast.info("New User Detected", {
+          description: "Redirecting to complete registration...",
+          id: loadingToast,
+        });
+        router.push("/signup");
+        return;
+      } else if (error.response) {
+        description = error.response.data?.error || error.message;
       } else if (error.request) {
-        description = "No response from the server. Please check your network connection.";
+        description = "No response from server. Check your network.";
       } else {
         description = error.message;
       }
@@ -224,7 +212,7 @@ export default function LoginPage() {
   const getStepTitle = (): string => {
     switch (step) {
       case 1: return "Login to Your Account";
-      case 2: return "Verify Your Number";
+      case 2: return `Verify Your Number${otpReceived ? ` (OTP: ${otpReceived})` : ""}`;
       default: return "Login";
     }
   };
@@ -232,13 +220,9 @@ export default function LoginPage() {
   // Pre-fill OTP fields if OTP is received in development mode
   useEffect(() => {
     if (otpReceived && step === 2) {
-      const otpDigits = otpReceived.split('');
+      const otpDigits = otpReceived.split("");
       if (otpDigits.length === 6) {
-        const newOtp = [...otp];
-        otpDigits.forEach((digit, index) => {
-          newOtp[index] = digit;
-        });
-        setOtp(newOtp);
+        setOtp(otpDigits);
       }
     }
   }, [otpReceived, step]);
@@ -246,14 +230,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#1A202C] text-white flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Hidden OTP Title that becomes visible when OTP is received */}
-        {otpReceived && (
-          <div className="mb-4 p-4 bg-green-600 rounded-md text-center">
-            <h3 className="font-bold">Your OTP: {otpReceived}</h3>
-            <p className="text-sm">Enter this code below to verify your number</p>
-          </div>
-        )}
-
         {/* Branding Header */}
         <div className="flex items-center mb-8">
           <Shield className="h-8 w-8 mr-2 text-blue-500" />
@@ -332,10 +308,16 @@ export default function LoginPage() {
                       />
                     ))}
                   </div>
-                  <p className="text-xs text-gray-400">Enter the 6-digit code for +254{phoneNumber}</p>
+                  <p className="text-xs text-gray-400">Enter the 6-digit code sent to +254{phoneNumber}</p>
                   <p className="text-xs text-gray-400 mt-4">
                     Didn't receive the code?{" "}
-                    <button className="text-blue-500 underline" onClick={handleSendOTP}>Resend</button>
+                    <button
+                      className="text-blue-500 underline"
+                      onClick={handleSendOTP}
+                      disabled={isLoading}
+                    >
+                      Resend
+                    </button>
                   </p>
                 </div>
                 <div className="flex space-x-2 w-full">
@@ -367,7 +349,9 @@ export default function LoginPage() {
           </CardContent>
         </Card>
 
-        <p className="text-xs text-center text-gray-400 mt-6">You will receive the <span className="text-blue-500 font-bold text-green-500">OTP via Sonner/alert</span> if you did not receive it via WhatsApp</p>
+        <p className="text-xs text-center text-gray-400 mt-6">
+          You will receive the <span className="text-blue-500 font-bold text-green-500">OTP via Sonner/alert</span> if you did not receive it via WhatsApp
+        </p>
       </div>
     </div>
   );

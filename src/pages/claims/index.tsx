@@ -60,7 +60,7 @@ export default function ClaimsPage() {
   const [claimDetails, setClaimDetails] = useState<string>("");
   const [claimImage, setClaimImage] = useState<File | null>(null);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5300";
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"; // Adjusted to match backend port if needed
   const PHONE_REGEX = /^\+254\d{9}$/;
   const EXPLORER_URL = process.env.NODE_ENV === 'production' 
     ? 'https://hashscan.io/mainnet/transaction/' 
@@ -69,29 +69,30 @@ export default function ClaimsPage() {
   const fetchPoliciesAndClaims = useCallback(async (phone: string): Promise<Policy[]> => {
     setIsLoading(true);
     const loadingToast = toast.loading("Fetching policies and claims...");
-  
+    const token = localStorage.getItem("token"); // Backend requires token
+
     try {
       const [policiesResponse, claimsResponse] = await Promise.all([
         axios.post<{ policies: Policy[] }>(
           `${API_BASE_URL}/policies`,
-          { phone, page: 1, limit: 10 },
-          { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+          { phone }, // Backend expects { phone }
+          { headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, timeout: 10000 }
         ),
-        axios.post<{ claims: Claim[], success: boolean, total: number }>(
+        axios.post<{ success: boolean, claims: Claim[], total: number }>(
           `${API_BASE_URL}/get-claims`,
-          { phone },
-          { headers: { "Content-Type": "application/json" }, timeout: 10000 }
+          { phone }, // Backend expects { phone }
+          { headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, timeout: 10000 }
         )
       ]);
-  
+
       const fetchedPolicies = policiesResponse.data.policies || [];
       const fetchedClaims = claimsResponse.data.claims || [];
       setPolicies(fetchedPolicies);
       setClaims(fetchedClaims);
-  
+
       // Get the policy IDs that have claims
       const claimedPolicyIds = new Set(fetchedClaims.map((claim) => claim.policy));
-  
+
       // Filter active policies, excluding those with claims
       const activePoliciesList = fetchedPolicies.filter(
         (p) =>
@@ -99,15 +100,15 @@ export default function ClaimsPage() {
           new Date(p.expiryDate) > new Date() &&
           !claimedPolicyIds.has(p._id)
       );
-  
+
       setActivePolicies(activePoliciesList);
       setSelectedPolicyId(activePoliciesList.length > 0 ? activePoliciesList[0]._id : null);
-  
+
       toast.success("Data loaded", {
         description: `${activePoliciesList.length} active policies, ${fetchedClaims.length} claims`,
         id: loadingToast,
       });
-  
+
       return activePoliciesList;
     } catch (error) {
       console.error("Failed to fetch policies or claims:", error);
@@ -119,6 +120,8 @@ export default function ClaimsPage() {
         description: "Failed to fetch policies or claims",
         id: loadingToast,
       });
+      const axiosError = error as AxiosError;
+      if (axiosError.response?.status === 401) handleLogout();
       return [];
     } finally {
       setIsLoading(false);
@@ -178,6 +181,7 @@ export default function ClaimsPage() {
     setIsLoading(true);
     setError(null);
     const loadingToast = toast.loading("Processing claim...");
+    const token = localStorage.getItem("token"); // Backend requires token
 
     try {
       const formData = new FormData();
@@ -186,17 +190,17 @@ export default function ClaimsPage() {
       formData.append("details", claimDetails);
       formData.append("image", claimImage);
 
-      const response = await axios.post<{ message: string, transactionId?: string, paymentTransactionId?: string }>(
+      const response = await axios.post<{ message: string, transactionId?: string, smartContractStatus?: string }>(
         `${API_BASE_URL}/claim`,
         formData,
         {
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: { "Content-Type": "multipart/form-data", "Authorization": `Bearer ${token}` }, // Backend expects token
           timeout: 15000,
         }
       );
 
       toast.success("Claim Processed", {
-        description: response.data.message || "Your claim has been submitted",
+        description: `${response.data.message}. Smart Contract: ${response.data.smartContractStatus || "Pending"}`,
         id: loadingToast,
       });
 
@@ -206,16 +210,17 @@ export default function ClaimsPage() {
     } catch (error) {
       const axiosError = error as AxiosError<{ error: string }>;
       const status = axiosError.response?.status;
-      let description = "An unexpected error occurred";
+      let description = axiosError.response?.data?.error || "An unexpected error occurred";
 
       if (status === 400) {
         description = axiosError.response?.data.error || "Invalid request";
+      } else if (status === 401) {
+        description = "Unauthorized. Please log in again.";
+        handleLogout();
       } else if (status === 429) {
         description = "Too many requests. Please try again later.";
       } else if (status === 500) {
         description = "Server error. Please try again later.";
-      } else {
-        description = axiosError.message || "Network error";
       }
 
       toast.error("Claim Failed", { description, id: loadingToast });
