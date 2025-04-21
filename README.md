@@ -1,4 +1,4 @@
-# HashGuard Hackathon Pitch
+# HashGuard Hackathon
 Welcome to HashGuard: The Future of Micron Insurance for Boda Boda Riders! 
 ## Problem Statement
 
