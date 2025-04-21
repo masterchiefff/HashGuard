@@ -1,40 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# HashGuard Hackathon Pitch
+Welcome to HashGuard: The Future of Micron Insurance for Boda Boda Riders! 
+## Problem Statement
 
-## Getting Started
+Boda boda (motorcycle) riders are subjected to everyday risks on the road, from accidents to motorbike theft, but the majority of them lack an affordable and convenient insurance cover. Traditional insurance is expensive, tedious, and entails extensive documentation, thus out of reach to most riders.
 
-First, run the development server:
+## Solution: HashGuard
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+HashGuard is a tokenized micron insurance platform tailored for boda boda riders. It provides instant, low-cost, and easy-to-use insurance powered by Hedera Hashgraph (HBAR)—without requiring users to know anything about blockchain
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Key Features
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+Hassle-Free Experience – Riders get an insurance account without a wallet or blockchain knowledge.
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
+Preloaded Accounts – Every rider's account comes with preloaded HBAR for transactions, so there's no onboarding friction.
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+Tokenized Micron Insurance – Insurance policies are tokenized, thus can be instantly activated, verified, and claimed.
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Fast & Low-Cost Transactions – Powered by Hedera Hashgraph, guaranteeing secure, near-instant, and low-cost transactions.
 
-## Learn More
+Automated Payouts – Riders are paid immediately once an accident is verified, no bureaucracy.
 
-To learn more about Next.js, take a look at the following resources:
+## How It Works
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
+Sign Up – Riders sign up with their phone number, no crypto know-how required.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Choose a Plan – There are low-cost tokenized insurance plans based on needs.
 
-## Deploy on Vercel
+Peace of Mind Riding – Automatic coverage is taken care of on the blockchain.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Instant Claims – On the occurrence of an accident, claims are taken care of automatically and directly sent to the mobile wallet of the rider.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+## Why HashGuard?
+
+Inclusive & Simple – Designed for riders with no crypto background.
+
+Tamper-Proof & Transparent – Hedera Hashgraph-supported for assurance of security and trust.
+
+Instant & Affordable – No agents, no papers—just pay when necessary.
+
+Join the Revolution in Boda Boda Insurance!
+
+Let's give boda boda riders simple, secure, and instant insurance through blockchain technology—no hassle!
